@@ -14,6 +14,7 @@ from datetime import date
 
 from build import SOURCES, build_bootstrap, write_bootstrap
 from sheets_client import (
+    a1_range,
     find_info_session_sheet,
     read_values,
     resolve_form_response_sheet,
@@ -130,13 +131,13 @@ def pull_rows():
     info_tab = SOURCES.get('infoSessionTab') or 'Form Responses 1'
 
     print('pulling applications…')
-    app_values = read_values(apps_id, f'{apps_tab}!A1:Z')
+    app_values = read_values(apps_id, a1_range(apps_tab))
     print('pulling coffee chats…')
-    coffee_values = read_values(coffee_id, f'{coffee_tab}!A1:Z')
+    coffee_values = read_values(coffee_id, a1_range(coffee_tab))
     info_values = []
     if info_id:
         print('pulling info session…')
-        info_values = read_values(info_id, f'{info_tab}!A1:Z')
+        info_values = read_values(info_id, a1_range(info_tab))
     else:
         print('info session sheet not found — attendance stays as last baked into bootstrap.')
         print('  Share the responses sheet and set sources.infoSessionResponsesSheetId.')

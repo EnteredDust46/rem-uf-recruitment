@@ -4,9 +4,8 @@ import os
 import re
 
 # Live-pull source file IDs (Google Drive / Sheets).
-# Info-session form exists ("Rem Information Session Fall 2026") in the F26
-# recruitment Drive; a linked responses spreadsheet was not visible to this
-# account. Drop the sheet ID here once Aya/Adam share it.
+# Info-session form "Rem Information Session Fall 2026" is linked to the
+# mastersheet tab "Info Session Attendances".
 SOURCES = {
     'applicationsSheetId': '1M03BJpDREoNr_p_1QfZXzs4xU1fIh6DeDz_VErgqN6g',
     'applicationsSheetTitle': 'FL2026 Rem Applications - UF',
@@ -18,8 +17,9 @@ SOURCES = {
     'coffeeChatTab': 'Form Responses 1',
     'coffeeChatFormId': '1fXER_btmr2azoT5SbZmY3vzrX3HrNEVaHb2FnOvKNoU',
     'infoSessionFormTitle': 'Rem Information Session Fall 2026',
-    'infoSessionResponsesSheetId': '',
-    'infoSessionTab': 'Form Responses 1',
+    'infoSessionFormId': '1LQ2ca64DFcLUuCMoc3WLSJ4KSwjelWMk2H2LaHyGbBE',
+    'infoSessionResponsesSheetId': '1AamE6ob5DW5LhvAVodZsocQiyNz7_P_SLXhFeSmgbkQ',
+    'infoSessionTab': 'Info Session Attendances',
     'mastersheetId': '1AamE6ob5DW5LhvAVodZsocQiyNz7_P_SLXhFeSmgbkQ',
     'mastersheetTitle': 'Copy of Recruitment Master 2026',
     # Meet the Members responses sheet doesn't exist yet (event is Sep 18).

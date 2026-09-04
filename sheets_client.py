@@ -8,6 +8,7 @@ Never print credential material. Share the three sheets (and the Drive folder, f
 discovery) with the service-account email — Viewer for pull, Editor for push.
 """
 import os
+import re
 
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
@@ -78,6 +79,12 @@ def drive_service():
 def forms_service():
     from googleapiclient.discovery import build
     return build('forms', 'v1', credentials=get_creds(), cache_discovery=False)
+
+
+def a1_range(tab, cells='A1:Z'):
+    t = str(tab or '')
+    quoted = "'" + t.replace("'", "''") + "'" if re.search(r'[^A-Za-z0-9_]', t) else t
+    return quoted + '!' + cells
 
 
 def read_values(spreadsheet_id, range_a1):

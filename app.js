@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'sheets-live-20260904';
+const BUILD_STAMP = 'info-session-20260904';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -605,8 +605,8 @@ function sheetSources() {
     applicationsTab: 'Sheet1',
     coffeeChatResponsesSheetId: '1sIhs4I2i53mmH2cUObWarBDnJ06-nDl53nVflkZAnBo',
     coffeeChatTab: 'Form Responses 1',
-    infoSessionResponsesSheetId: '',
-    infoSessionTab: 'Form Responses 1',
+    infoSessionResponsesSheetId: '1AamE6ob5DW5LhvAVodZsocQiyNz7_P_SLXhFeSmgbkQ',
+    infoSessionTab: 'Info Session Attendances',
   }, B.sources || {});
 }
 
@@ -667,6 +667,12 @@ function parseInfoRows(values) {
   }).filter(function (c) { return c.name || c.email; });
 }
 
+function a1Range(tab, cells) {
+  const t = String(tab || '');
+  const quoted = /[^A-Za-z0-9_]/.test(t) ? "'" + t.replace(/'/g, "''") + "'" : t;
+  return quoted + '!' + cells;
+}
+
 async function sheetsValues(spreadsheetId, range) {
   const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId)
     + '/values/' + encodeURIComponent(range) + '?key=' + encodeURIComponent(GOOGLE_API_KEY);
@@ -714,11 +720,11 @@ async function pullSheets() {
   const src = sheetSources();
   try {
     const jobs = [
-      sheetsValues(src.applicationsSheetId, (src.applicationsTab || 'Sheet1') + '!A1:Z'),
-      sheetsValues(src.coffeeChatResponsesSheetId, (src.coffeeChatTab || 'Form Responses 1') + '!A1:Z'),
+      sheetsValues(src.applicationsSheetId, a1Range(src.applicationsTab || 'Sheet1', 'A1:Z')),
+      sheetsValues(src.coffeeChatResponsesSheetId, a1Range(src.coffeeChatTab || 'Form Responses 1', 'A1:Z')),
     ];
     if (src.infoSessionResponsesSheetId) {
-      jobs.push(sheetsValues(src.infoSessionResponsesSheetId, (src.infoSessionTab || 'Form Responses 1') + '!A1:Z'));
+      jobs.push(sheetsValues(src.infoSessionResponsesSheetId, a1Range(src.infoSessionTab || 'Info Session Attendances', 'A1:Z')));
     }
     const results = await Promise.all(jobs);
     const apps = parseApplicationRows(results[0]);

@@ -91,7 +91,7 @@ python make_csv.py state.json  # same column layouts as the dashboard export
 | Applications (UF filter of the national form) | `1M03BJpDREoNr_p_1QfZXzs4xU1fIh6DeDz_VErgqN6g` tab `Sheet1` |
 | National form (IMPORTRANGE source) | `1gu164myetDxGxQzZwlecYdauuEHiPpOekfOlYCUiPyQ` tab `Form Responses 1` |
 | Coffee chats | `1sIhs4I2i53mmH2cUObWarBDnJ06-nDl53nVflkZAnBo` tab `Form Responses 1` (form `1fXER_btmr2azoT5SbZmY3vzrX3HrNEVaHb2FnOvKNoU`) |
-| Info session | Form **Rem Information Session Fall 2026** is in Drive. A linked responses spreadsheet was **not found** (not shared, or the form is not linked to Sheets). Set `infoSessionResponsesSheetId` in `build.py` `SOURCES` once it is shared. |
+| Info session | Form `1LQ2ca64DFcLUuCMoc3WLSJ4KSwjelWMk2H2LaHyGbBE` writes to the mastersheet tab `Info Session Attendances` |
 | Mastersheet (optional push dest) | `1AamE6ob5DW5LhvAVodZsocQiyNz7_P_SLXhFeSmgbkQ` |
 
 Coffee-chat columns: `Timestamp`, `Name`, `UF Email`, `Grade`, `If you went to a Coffee Chat, who did you speak to?`
