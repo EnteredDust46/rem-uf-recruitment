@@ -481,7 +481,7 @@ function round2Total(g) {
 // An auto-filled academics score on its own doesn't make someone "reviewed" — a person
 // has to have scored something before the applicant counts toward progress or stats.
 function hasManualScore(g) {
-  return !!g && Object.keys(g.scores).some(k => typeof g.scores[k] === 'number');
+  return !!g && !!g.scores && Object.keys(g.scores).some(k => typeof g.scores[k] === 'number');
 }
 
 function scoreFor(round, applicantId) {
