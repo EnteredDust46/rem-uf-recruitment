@@ -1,12 +1,12 @@
 import json
 
-with open('bootstrap.json.txt', 'r') as f:
+with open('bootstrap.json.txt', 'r', encoding='utf-8') as f:
     bootstrap = json.load(f)
 
-with open('style.css', 'r') as f:
+with open('style.css', 'r', encoding='utf-8') as f:
     css = f.read()
 
-with open('app.js', 'r') as f:
+with open('app.js', 'r', encoding='utf-8') as f:
     js = f.read()
 
 bootstrap_json = json.dumps(bootstrap)
@@ -44,7 +44,7 @@ window.BOOTSTRAP = {bootstrap_json};
 </html>
 """
 
-with open('index.html', 'w') as f:
+with open('index.html', 'w', encoding='utf-8') as f:
     f.write(html)
 
 print(f"Wrote index.html: {len(html)} bytes")

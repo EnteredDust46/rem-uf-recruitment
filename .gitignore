@@ -9,3 +9,6 @@ venv/
 __pycache__/
 *.pyc
 rem-uf-for-cursor/
+*.csv
+*.csv.tmp
+refresh_once.log

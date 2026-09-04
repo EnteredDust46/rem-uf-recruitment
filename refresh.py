@@ -3,16 +3,19 @@
 Does not touch state.json or the `data` branch.
 
   python refresh.py
+  python refresh.py --apps-csv path --coffee-csv path --info-csv path
   python refresh.py --commit
   python refresh.py --commit --push
 """
 import argparse
+import csv
+import json
 import os
 import subprocess
 import sys
 from datetime import date
 
-from build import SOURCES, build_bootstrap, write_bootstrap
+from build import SOURCES, build_bootstrap, is_uf, load_existing_ids, write_bootstrap
 from sheets_client import (
     a1_range,
     find_info_session_sheet,
@@ -115,6 +118,40 @@ def resolve_info_sheet():
     return ''
 
 
+def values_from_csv(path):
+    with open(path, newline='', encoding='utf-8-sig') as f:
+        return [list(row) for row in csv.reader(f)]
+
+
+def attendance_from_bootstrap(path='bootstrap.json.txt'):
+    """Last-known coffee/info rows so a failed attendance download does not wipe matches."""
+    if not os.path.exists(path):
+        return [], []
+    with open(path, encoding='utf-8') as f:
+        data = json.load(f)
+    coffee, info = [], []
+    for a in data.get('applicants') or []:
+        att = a.get('attendance') or {}
+        name, email = a.get('name') or '', a.get('email') or ''
+        for c in att.get('coffeeChats') or []:
+            coffee.append({
+                'timestamp': c.get('timestamp') or '',
+                'name': name,
+                'email': email,
+                'spokeTo': c.get('spokeTo') or '',
+            })
+        inf = att.get('infoSession')
+        if inf:
+            info.append({
+                'timestamp': inf.get('timestamp') or '',
+                'name': name,
+                'email': email,
+                'session': inf.get('session') or '',
+                'appliedBefore': inf.get('appliedBefore') or '',
+            })
+    return coffee, info
+
+
 def pull_rows():
     apps_id = SOURCES['applicationsSheetId']
     apps_tab = SOURCES.get('applicationsTab') or 'Sheet1'
@@ -156,16 +193,53 @@ def git(*args):
     return subprocess.check_call(['git'] + list(args))
 
 
+def load_from_csvs(apps_csv, coffee_csv, info_csv):
+    if not apps_csv or not os.path.exists(apps_csv):
+        raise SystemExit('applications CSV is required')
+    applicants_raw = parse_applications(values_from_csv(apps_csv))
+    boot_coffee, boot_info = attendance_from_bootstrap()
+    if coffee_csv and os.path.exists(coffee_csv):
+        coffee_raw = parse_coffee(values_from_csv(coffee_csv))
+        print(f'coffee from CSV ({len(coffee_raw)} rows)')
+    else:
+        coffee_raw = boot_coffee
+        print(f'coffee CSV missing — keeping last-known attendance ({len(coffee_raw)} rows)')
+    if info_csv and os.path.exists(info_csv):
+        info_raw = parse_info(values_from_csv(info_csv))
+        print(f'info from CSV ({len(info_raw)} rows)')
+    else:
+        info_raw = boot_info
+        print(f'info CSV missing — keeping last-known attendance ({len(info_raw)} rows)')
+    return applicants_raw, coffee_raw, info_raw
+
+
 def main():
     p = argparse.ArgumentParser(description='Rebuild the dashboard roster from Google Sheets.')
     p.add_argument('--commit', action='store_true', help='git add + commit assembled files on the current branch')
     p.add_argument('--push', action='store_true', help='git push (requires --commit; never force-push, never touches data)')
+    p.add_argument('--apps-csv', help='applications Form Responses CSV (PII; do not commit)')
+    p.add_argument('--coffee-csv', help='coffee chat Form Responses CSV')
+    p.add_argument('--info-csv', help='info session attendances CSV')
     args = p.parse_args()
     if args.push and not args.commit:
         raise SystemExit('--push requires --commit')
 
-    applicants_raw, coffee_raw, info_raw = pull_rows()
+    if args.apps_csv:
+        applicants_raw, coffee_raw, info_raw = load_from_csvs(
+            args.apps_csv, args.coffee_csv, args.info_csv,
+        )
+    else:
+        applicants_raw, coffee_raw, info_raw = pull_rows()
     print(f'pulled applications={len(applicants_raw)} coffee={len(coffee_raw)} info={len(info_raw)}')
+
+    existing = load_existing_ids()
+    uf_emails = {
+        (a.get('email') or '').lower().strip()
+        for a in applicants_raw
+        if is_uf(a.get('university')) and (a.get('email') or '').strip()
+    }
+    new_emails = len(uf_emails - set(existing))
+    print(f'existing ids={len(existing)} new UF emails vs bootstrap={new_emails}')
 
     bootstrap, stats = build_bootstrap(
         applicants_raw, coffee_raw, info_raw, built_at=date.today().isoformat(),

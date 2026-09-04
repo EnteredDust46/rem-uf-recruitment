@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'info-session-20260904';
+const BUILD_STAMP = 'national-uf-20260904-1';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };

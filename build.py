@@ -7,9 +7,12 @@ import re
 # Info-session form "Rem Information Session Fall 2026" is linked to the
 # mastersheet tab "Info Session Attendances".
 SOURCES = {
-    'applicationsSheetId': '1M03BJpDREoNr_p_1QfZXzs4xU1fIh6DeDz_VErgqN6g',
-    'applicationsSheetTitle': 'FL2026 Rem Applications - UF',
-    'applicationsTab': 'Sheet1',
+    'applicationsSheetId': '1gu164myetDxGxQzZwlecYdauuEHiPpOekfOlYCUiPyQ',
+    'applicationsSheetTitle': 'FL2026 Rem on Campus Application (Responses)',
+    'applicationsTab': 'Form Responses 1',
+    'applicationsGid': '1963958788',
+    'ufNamedApplicationsSheetId': '1M03BJpDREoNr_p_1QfZXzs4xU1fIh6DeDz_VErgqN6g',
+    'ufNamedApplicationsSheetTitle': 'FL2026 Rem Applications - UF',
     'nationalApplicationsSheetId': '1gu164myetDxGxQzZwlecYdauuEHiPpOekfOlYCUiPyQ',
     'nationalApplicationsTab': 'Form Responses 1',
     'coffeeChatResponsesSheetId': '1sIhs4I2i53mmH2cUObWarBDnJ06-nDl53nVflkZAnBo',
@@ -386,7 +389,7 @@ def rubric_round2():
 def build_bootstrap(applicants_raw, coffee_raw, info_raw, round1_q=None, existing_ids=None, built_at=None):
     """Filter to UF, assign stable IDs (preserve by email), match attendance, return bootstrap dict + stats."""
     if round1_q is None:
-        with open('round1_questions.json', encoding='utf-8') as f:
+        with open('round1_questions.json', encoding='utf-8-sig') as f:
             round1_q = json.load(f)
     if existing_ids is None:
         existing_ids = load_existing_ids()
