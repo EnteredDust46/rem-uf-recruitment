@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'save-harden-20260904';
+const BUILD_STAMP = 'save-cors-20260904';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -68,7 +68,6 @@ function ghHeaders(extra) {
   return Object.assign({
     'Authorization': 'Bearer ' + GH_TOKEN,
     'Accept': 'application/vnd.github+json',
-    'Cache-Control': 'no-cache',
   }, extra || {});
 }
 
