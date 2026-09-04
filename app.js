@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'vouch-note-20260904';
+const BUILD_STAMP = 'meet-members-20260904';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -587,7 +587,7 @@ function mergeApplicants(list) {
   return added;
 }
 
-function applyAttendance(coffeeRows, infoRows) {
+function applyAttendance(coffeeRows, infoRows, meetRows) {
   const idx = prepareMatchIndex(STATE.applicants);
   if (coffeeRows) {
     STATE.applicants.forEach(function (a) { a.attendance.coffeeChats = []; });
@@ -604,6 +604,13 @@ function applyAttendance(coffeeRows, infoRows) {
     infoRows.forEach(function (c) {
       const rec = findApplicant(c.name, c.email, idx);
       if (rec) rec.attendance.infoSession = { timestamp: c.timestamp, session: c.session, appliedBefore: c.appliedBefore };
+    });
+  }
+  if (meetRows) {
+    STATE.applicants.forEach(function (a) { a.attendance.meetMembers = null; });
+    meetRows.forEach(function (c) {
+      const rec = findApplicant(c.name, c.email, idx);
+      if (rec) rec.attendance.meetMembers = { timestamp: c.timestamp, year: c.year, appliedBefore: c.appliedBefore };
     });
   }
   stripMatchKeys(STATE.applicants);
@@ -665,6 +672,25 @@ function parseInfoRows(values) {
       name: iName >= 0 ? (r[iName] || '') : '',
       email: iEmail >= 0 ? (r[iEmail] || '') : '',
       session: iSession >= 0 ? (r[iSession] || '') : '',
+      appliedBefore: iApplied >= 0 ? (r[iApplied] || '') : '',
+    };
+  }).filter(function (c) { return c.name || c.email; });
+}
+
+function parseMeetMembersRows(values) {
+  if (!values || !values.length) return [];
+  const h = values[0];
+  const iTs = headerIndex(h, ['timestamp']);
+  const iName = headerIndex(h, ['name']);
+  const iEmail = headerIndex(h, ['email']);
+  const iYear = headerIndex(h, ['year']);
+  const iApplied = headerIndex(h, ['applied']);
+  return values.slice(1).map(function (r) {
+    return {
+      timestamp: iTs >= 0 ? (r[iTs] || '') : '',
+      name: iName >= 0 ? (r[iName] || '') : '',
+      email: iEmail >= 0 ? (r[iEmail] || '') : '',
+      year: iYear >= 0 ? (r[iYear] || '') : '',
       appliedBefore: iApplied >= 0 ? (r[iApplied] || '') : '',
     };
   }).filter(function (c) { return c.name || c.email; });
@@ -994,6 +1020,7 @@ function renderOverview() {
   const r2Scored = r2Pool.filter(a => scoreFor('round2', a.id) !== null).length;
   const coffeeCount = STATE.applicants.filter(a => a.attendance && a.attendance.coffeeChats && a.attendance.coffeeChats.length).length;
   const infoCount = STATE.applicants.filter(a => a.attendance && a.attendance.infoSession).length;
+  const meetCount = STATE.applicants.filter(a => a.attendance && a.attendance.meetMembers).length;
   const vouchedCount = STATE.applicants.filter(a => vouchCount(a.id)).length;
   const years = {};
   STATE.applicants.forEach(a => { years[a.classYear || 'Unknown'] = (years[a.classYear || 'Unknown'] || 0) + 1; });
@@ -1043,9 +1070,10 @@ function renderOverview() {
           <div class="section-title">Recruitment funnel</div>
           ${funnelRow('Coffee chat sign-ins logged', B.meta.coffeeChatRows, B.meta.coffeeChatRows)}
           ${funnelRow('Info session check-ins', B.meta.infoSessionRows, B.meta.coffeeChatRows)}
+          ${funnelRow('Meet the Members check-ins', B.meta.meetMembersRows || 0, B.meta.coffeeChatRows)}
           ${funnelRow('Applications submitted', total, B.meta.coffeeChatRows)}
           <div class="sub" style="margin-top:9px; color:var(--slate);">
-            Most coffee chat and info session attendees haven't submitted an application, so they don't appear above — ${coffeeCount} of ${total} applicants have a logged coffee chat and ${infoCount} an info session. That gap closes as more of them submit applications.
+            Most event sign-ins haven't submitted an application, so they don't appear above — ${coffeeCount} of ${total} applicants have a logged coffee chat, ${infoCount} an info session, and ${meetCount} Meet the Members. That gap closes as more of them submit applications.
           </div>
         </div>
         <div class="card card-pad">
@@ -1581,7 +1609,7 @@ function renderGradeSide(a, round, g) {
       <div class="section-title" style="margin-bottom:6px;">Attendance</div>
       ${coffeeAttendanceBlock(a)}
       ${attendanceRow('Info session', !!(a.attendance && a.attendance.infoSession), a.attendance && a.attendance.infoSession ? (a.attendance.infoSession.session || a.attendance.infoSession.timestamp || 'checked in') : '')}
-      ${attendanceRow('Meet the Members', !!(a.attendance && a.attendance.meetMembers), '')}
+      ${attendanceRow('Meet the Members', !!(a.attendance && a.attendance.meetMembers), meetMembersDetail(a.attendance && a.attendance.meetMembers))}
     </div>
     ${renderVouchCard(a)}
   `;
@@ -1664,6 +1692,15 @@ function vouchNames(applicantId) {
 
 function attendanceRow(label, yes, detail) {
   return `<div class="attendance-row ${yes ? 'yes' : 'no'}"><span class="ic">${yes ? '●' : '○'}</span><strong>${label}</strong>${detail ? `<span class="sub" style="color:var(--slate); font-size:12px;">— ${esc(detail)}</span>` : ''}</div>`;
+}
+
+function meetMembersDetail(mm) {
+  if (!mm) return '';
+  const bits = [];
+  if (mm.year) bits.push(String(mm.year));
+  if (mm.timestamp) bits.push(String(mm.timestamp));
+  if (mm.appliedBefore) bits.push('applied before: ' + String(mm.appliedBefore));
+  return bits.join(' · ') || 'checked in';
 }
 
 function coffeeAttendanceBlock(a) {

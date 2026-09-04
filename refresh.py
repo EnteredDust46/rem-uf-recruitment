@@ -81,6 +81,29 @@ def parse_coffee(values):
     return out
 
 
+def parse_meet(values):
+    if not values:
+        return []
+    headers = values[0]
+    i_ts = _header_index(headers, 'timestamp')
+    i_name = _header_index(headers, 'name')
+    i_email = _header_index(headers, 'email')
+    i_year = _header_index(headers, 'year')
+    i_applied = _header_index(headers, 'applied')
+    out = []
+    for r in values[1:]:
+        rec = {
+            'timestamp': cell(r, i_ts) if i_ts >= 0 else '',
+            'name': cell(r, i_name) if i_name >= 0 else '',
+            'email': cell(r, i_email) if i_email >= 0 else '',
+            'year': cell(r, i_year) if i_year >= 0 else '',
+            'appliedBefore': cell(r, i_applied) if i_applied >= 0 else '',
+        }
+        if rec['name'] or rec['email']:
+            out.append(rec)
+    return out
+
+
 def parse_info(values):
     if not values:
         return []
@@ -158,11 +181,7 @@ def pull_rows():
     coffee_id = SOURCES['coffeeChatResponsesSheetId']
     coffee_tab = SOURCES.get('coffeeChatTab') or 'Form Responses 1'
 
-    form_id = SOURCES.get('coffeeChatFormId')
-    if form_id:
-        linked, _title = resolve_form_response_sheet(form_id)
-        if linked:
-            coffee_id = linked
+    # Prefer the explicit coffee tab (mastersheet is richer than the dedicated form sheet).
 
     info_id = resolve_info_sheet()
     info_tab = SOURCES.get('infoSessionTab') or 'Form Responses 1'
@@ -179,7 +198,14 @@ def pull_rows():
         print('info session sheet not found — attendance stays as last baked into bootstrap.')
         print('  Share the responses sheet and set sources.infoSessionResponsesSheetId.')
 
-    return parse_applications(app_values), parse_coffee(coffee_values), parse_info(info_values)
+    meet_id = SOURCES.get('meetMembersSheetId') or ''
+    meet_tab = SOURCES.get('meetMembersTab') or 'Form Responses 1'
+    meet_values = []
+    if meet_id:
+        print('pulling Meet the Members…')
+        meet_values = read_values(meet_id, a1_range(meet_tab))
+
+    return parse_applications(app_values), parse_coffee(coffee_values), parse_info(info_values), parse_meet(meet_values)
 
 
 def assemble_site():
@@ -220,6 +246,7 @@ def main():
     p.add_argument('--apps-csv', help='applications Form Responses CSV (PII; do not commit)')
     p.add_argument('--coffee-csv', help='coffee chat Form Responses CSV')
     p.add_argument('--info-csv', help='info session attendances CSV')
+    p.add_argument('--meet-csv', help='Meet the Members Form Responses CSV')
     args = p.parse_args()
     if args.push and not args.commit:
         raise SystemExit('--push requires --commit')
@@ -228,9 +255,10 @@ def main():
         applicants_raw, coffee_raw, info_raw = load_from_csvs(
             args.apps_csv, args.coffee_csv, args.info_csv,
         )
+        meet_raw = parse_meet(values_from_csv(args.meet_csv)) if getattr(args, 'meet_csv', None) and os.path.exists(args.meet_csv) else []
     else:
-        applicants_raw, coffee_raw, info_raw = pull_rows()
-    print(f'pulled applications={len(applicants_raw)} coffee={len(coffee_raw)} info={len(info_raw)}')
+        applicants_raw, coffee_raw, info_raw, meet_raw = pull_rows()
+    print(f'pulled applications={len(applicants_raw)} coffee={len(coffee_raw)} info={len(info_raw)} meet={len(meet_raw)}')
 
     existing = load_existing_ids()
     uf_emails = {
@@ -243,6 +271,7 @@ def main():
 
     bootstrap, stats = build_bootstrap(
         applicants_raw, coffee_raw, info_raw, built_at=date.today().isoformat(),
+        meet_raw=meet_raw,
     )
     nbytes = write_bootstrap(bootstrap)
     print('coffee match methods:', stats['match_how'])

@@ -15,17 +15,25 @@ SOURCES = {
     'ufNamedApplicationsSheetTitle': 'FL2026 Rem Applications - UF',
     'nationalApplicationsSheetId': '1gu164myetDxGxQzZwlecYdauuEHiPpOekfOlYCUiPyQ',
     'nationalApplicationsTab': 'Form Responses 1',
-    'coffeeChatResponsesSheetId': '1sIhs4I2i53mmH2cUObWarBDnJ06-nDl53nVflkZAnBo',
-    'coffeeChatTitle': 'Rem Fall 2026 Coffee Chats Sign-In (Responses)',
-    'coffeeChatTab': 'Form Responses 1',
+    'coffeeChatResponsesSheetId': '1AamE6ob5DW5LhvAVodZsocQiyNz7_P_SLXhFeSmgbkQ',
+    'coffeeChatTitle': 'Copy of Recruitment Master 2026',
+    'coffeeChatTab': 'Coffee Chat Attendance',
+    'coffeeChatGid': '1099581774',
+    'coffeeChatFormResponsesSheetId': '1sIhs4I2i53mmH2cUObWarBDnJ06-nDl53nVflkZAnBo',
+    'coffeeChatFormTitle': 'Rem Fall 2026 Coffee Chats Sign-In (Responses)',
+    'coffeeChatFormTab': 'Form Responses 1',
     'coffeeChatFormId': '1fXER_btmr2azoT5SbZmY3vzrX3HrNEVaHb2FnOvKNoU',
     'infoSessionFormTitle': 'Rem Information Session Fall 2026',
     'infoSessionFormId': '1LQ2ca64DFcLUuCMoc3WLSJ4KSwjelWMk2H2LaHyGbBE',
     'infoSessionResponsesSheetId': '1AamE6ob5DW5LhvAVodZsocQiyNz7_P_SLXhFeSmgbkQ',
     'infoSessionTab': 'Info Session Attendances',
+    'infoSessionGid': '1536839882',
     'mastersheetId': '1AamE6ob5DW5LhvAVodZsocQiyNz7_P_SLXhFeSmgbkQ',
     'mastersheetTitle': 'Copy of Recruitment Master 2026',
-    # Meet the Members responses sheet doesn't exist yet (event is Sep 18).
+    'meetMembersSheetId': '1TXTRuLNF-CgO_U4VzI_FfrAvExnrIqqwsqZ4suNpi1o',
+    'meetMembersSheetTitle': 'Rem Meet the Members Fall 2026 (Responses)',
+    'meetMembersTab': 'Form Responses 1',
+    'meetMembersGid': '742010126',
 }
 
 UF_MATCH = re.compile(r'university of florida', re.I)
@@ -202,7 +210,7 @@ def applicant_record(a, aid):
     }
 
 
-def apply_attendance(applicants, coffee_raw, info_raw):
+def apply_attendance(applicants, coffee_raw, info_raw, meet_raw=None):
     prepare_match_index(applicants)
     match_how = {'email': 0, 'name': 0, 'email-local': 0, 'fullname': 0}
     unmatched_coffee = 0
@@ -230,6 +238,18 @@ def apply_attendance(applicants, coffee_raw, info_raw):
         else:
             unmatched_info += 1
 
+    unmatched_meet = 0
+    for c in meet_raw or []:
+        rec, how = find_applicant(c.get('name'), c.get('email'))
+        if rec:
+            rec['attendance']['meetMembers'] = {
+                'timestamp': c.get('timestamp'),
+                'year': c.get('year') or '',
+                'appliedBefore': c.get('appliedBefore') or '',
+            }
+        else:
+            unmatched_meet += 1
+
     for rec in applicants:
         strip_match_keys(rec)
 
@@ -237,8 +257,10 @@ def apply_attendance(applicants, coffee_raw, info_raw):
         'match_how': match_how,
         'unmatched_coffee': unmatched_coffee,
         'unmatched_info': unmatched_info,
+        'unmatched_meet': unmatched_meet,
         'matched_coffee': sum(1 for a in applicants if a['attendance']['coffeeChats']),
         'matched_info': sum(1 for a in applicants if a['attendance']['infoSession']),
+        'matched_meet': sum(1 for a in applicants if a['attendance']['meetMembers']),
     }
 
 
@@ -386,7 +408,7 @@ def rubric_round2():
     }
 
 
-def build_bootstrap(applicants_raw, coffee_raw, info_raw, round1_q=None, existing_ids=None, built_at=None):
+def build_bootstrap(applicants_raw, coffee_raw, info_raw, round1_q=None, existing_ids=None, built_at=None, meet_raw=None):
     """Filter to UF, assign stable IDs (preserve by email), match attendance, return bootstrap dict + stats."""
     if round1_q is None:
         with open('round1_questions.json', encoding='utf-8-sig') as f:
@@ -406,11 +428,12 @@ def build_bootstrap(applicants_raw, coffee_raw, info_raw, round1_q=None, existin
         aid, next_idx = assign_stable_id(a.get('email'), a.get('name'), existing_ids, used, next_idx)
         applicants.append(applicant_record(a, aid))
 
-    stats = apply_attendance(applicants, coffee_raw, info_raw)
+    stats = apply_attendance(applicants, coffee_raw, info_raw, meet_raw)
     stats['skipped_non_uf'] = skipped_non_uf
     stats['applicant_count'] = len(applicants)
     stats['coffee_rows'] = len(coffee_raw or [])
     stats['info_rows'] = len(info_raw or [])
+    stats['meet_rows'] = len(meet_raw or [])
 
     bootstrap = {
         'meta': {
@@ -418,6 +441,7 @@ def build_bootstrap(applicants_raw, coffee_raw, info_raw, round1_q=None, existin
             'applicantCount': len(applicants),
             'coffeeChatRows': len(coffee_raw or []),
             'infoSessionRows': len(info_raw or []),
+            'meetMembersRows': len(meet_raw or []),
         },
         'applicants': applicants,
         'reviewers': reviewers(),
