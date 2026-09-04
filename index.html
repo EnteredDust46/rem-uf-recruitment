@@ -443,7 +443,7 @@ window.BOOTSTRAP = {"meta": {"builtAt": "2026-09-04", "applicantCount": 75, "cof
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'persist-check-20260904';
+const BUILD_STAMP = 'save-harden-20260904';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -508,6 +508,7 @@ function ghHeaders(extra) {
   return Object.assign({
     'Authorization': 'Bearer ' + GH_TOKEN,
     'Accept': 'application/vnd.github+json',
+    'Cache-Control': 'no-cache',
   }, extra || {});
 }
 
@@ -523,7 +524,7 @@ async function initCapabilities() {
 // ---------------- Load ----------------
 async function loadState() {
   try {
-    const res = await fetch(GH_API + '?ref=' + GH_BRANCH, { headers: ghHeaders() });
+    const res = await fetch(GH_API + '?ref=' + GH_BRANCH, { headers: ghHeaders(), cache: 'no-store' });
     if (res.status === 404) { ghAvailable = true; return; }   // first run: file doesn't exist yet
     if (!res.ok) { ghAvailable = false; setSaveStatus('error'); return; }
     ghAvailable = true;
@@ -546,6 +547,7 @@ async function pollForUpdates() {
   try {
     const res = await fetch(GH_API + '?ref=' + GH_BRANCH, {
       headers: ghHeaders(lastEtag ? { 'If-None-Match': lastEtag } : {}),
+      cache: 'no-store',
     });
     if (res.status === 304) return;               // nothing changed
     if (res.status === 404) return;                 // still no file yet
@@ -638,10 +640,15 @@ function cleanForSave(obj) {
 // A publish that loses a race reloads this view, so an edit that hasn't been saved yet
 // is written to sessionStorage first and replayed on the way back up.
 function pendingOps() {
-  try { return JSON.parse(sessionStorage.getItem(PENDING_KEY) || '[]'); } catch (e) { return []; }
+  try {
+    const raw = localStorage.getItem(PENDING_KEY) || sessionStorage.getItem(PENDING_KEY) || '[]';
+    return JSON.parse(raw);
+  } catch (e) { return []; }
 }
 function setPendingOps(ops) {
-  try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(ops)); } catch (e) { /* private mode */ }
+  const raw = JSON.stringify(ops);
+  try { localStorage.setItem(PENDING_KEY, raw); } catch (e) { /* private mode */ }
+  try { sessionStorage.removeItem(PENDING_KEY); } catch (e) { /* ignore */ }
 }
 function recordOp(op) {
   const ops = pendingOps();
@@ -649,6 +656,7 @@ function recordOp(op) {
   setPendingOps(ops.slice(-400));
 }
 function clearPendingOps() {
+  try { localStorage.removeItem(PENDING_KEY); } catch (e) { /* ignore */ }
   try { sessionStorage.removeItem(PENDING_KEY); } catch (e) { /* ignore */ }
 }
 function applyPendingOps() {
@@ -672,23 +680,33 @@ function applyPendingOps() {
 // ---------------- Save ----------------
 let saveTimer = null;
 let saving = false;
+let saveAgain = false;
 let lastSaveError = null;
 
 function queueSave() {
   if (readOnly) return;
   setSaveStatus('saving');
+  if (saving) { saveAgain = true; return; }
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(flushSave, 1200);
+  saveTimer = setTimeout(function () { flushSave(false); }, 700);
 }
 
-async function flushSave() {
+async function flushSave(urgent) {
   clearTimeout(saveTimer);
-  if (readOnly || saving) return;
+  if (readOnly) return;
+  // Never PUT an unchanged in-memory copy. A hidden/stale tab used to write the
+  // whole file on every tab switch and wipe scores someone else had just saved.
+  if (!pendingOps().length) { saveAgain = false; return; }
+  if (saving) { saveAgain = true; return; }
   saving = true;
+  saveAgain = false;
   // Pull the latest shared file first so a stale tab cannot overwrite newer
   // scores with an older in-memory copy. Local edits already sit in pendingOps
-  // and get replayed on top of whatever we just adopted.
-  try { await loadState(); applyPendingOps(); } catch (e) { /* save what we have */ }
+  // and get replayed on top of whatever we just adopted. Skip the extra GET on
+  // tab-close — there isn't time, and keepalive PUT + sha still refuses a stale write.
+  if (!urgent) {
+    try { await loadState(); applyPendingOps(); } catch (e) { /* save what we have */ }
+  }
   const doc = currentStateDoc();
   // Only the ops this write actually covers are retired; an edit made while the
   // request was in flight stays pending for the next one.
@@ -700,7 +718,13 @@ async function flushSave() {
       branch: GH_BRANCH,
     };
     if (currentSha) body.sha = currentSha;
-    const res = await fetch(GH_API, { method: 'PUT', headers: ghHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
+    const res = await fetch(GH_API, {
+      method: 'PUT',
+      headers: ghHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
+      cache: 'no-store',
+      keepalive: true,
+    });
     if (res.status === 401 || res.status === 403) {
       const remaining = res.headers.get('x-ratelimit-remaining');
       if (remaining === '0') {
@@ -724,7 +748,7 @@ async function flushSave() {
     } else if (!res.ok) {
       lastSaveError = 'HTTP ' + res.status;
       setSaveStatus('error');
-      setTimeout(function () { saving = false; flushSave(); }, 3000);
+      setTimeout(function () { saving = false; flushSave(false); }, 3000);
       return;
     } else {
       const json = await res.json();
@@ -733,15 +757,16 @@ async function flushSave() {
       liveVersion = doc.updatedAt;
       setPendingOps(pendingOps().slice(covered));
       setSaveStatus(pendingOps().length ? 'saving' : 'saved');
-      if (pendingOps().length) { saving = false; queueSave(); return; }
+      if (pendingOps().length || saveAgain) { saving = false; queueSave(); return; }
     }
   } catch (e) {
     lastSaveError = (e && e.message) || 'network error';
     setSaveStatus('error');
-    setTimeout(function () { saving = false; flushSave(); }, 3000);
+    setTimeout(function () { saving = false; flushSave(false); }, 3000);
     return;
   }
   saving = false;
+  if (saveAgain || pendingOps().length) queueSave();
 }
 
 // Every write goes through these, so the op is stashed before the state changes.
@@ -765,7 +790,7 @@ function saveAssignment(round, applicantId, groupId) {
   queueSave();
 }
 
-function flushAllPending() { flushSave(); }
+function flushAllPending() { flushSave(true); }
 
 function setSaveStatus(s) {
   STATE.saveStatus = s;
@@ -791,8 +816,8 @@ function saveLabelText() {
   return 'shared · live';
 }
 
-window.addEventListener('visibilitychange', function () { if (document.hidden) flushSave(); });
-window.addEventListener('pagehide', flushSave);
+window.addEventListener('visibilitychange', function () { if (document.hidden && pendingOps().length) flushSave(false); });
+window.addEventListener('pagehide', function () { if (pendingOps().length) flushSave(true); });
 
 // ---------------- Applicant merge (from live pull) ----------------
 function normName(n) { return (n || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim(); }
