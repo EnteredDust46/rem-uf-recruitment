@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'na-gpa-lock-20260904';
+const BUILD_STAMP = 'vouch-note-20260904';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -112,6 +112,9 @@ async function pollForUpdates() {
     if (res.status === 304) return;               // nothing changed
     if (res.status === 404) return;                 // still no file yet
     if (!res.ok) return;
+    // Don't consume this version while someone is mid-keystroke — adoptState
+    // replaces STATE.vouches and would orphan the textarea's in-memory record.
+    if (isEditingField()) return;
     lastEtag = res.headers.get('etag');
     const json = await res.json();
     if (json.sha === currentSha) return;
@@ -119,11 +122,7 @@ async function pollForUpdates() {
     const data = JSON.parse(b64DecodeUtf8(json.content));
     if (!liveVersion || (data.updatedAt || 0) > liveVersion) {
       adoptState(data);
-      // Don't yank focus out from under someone mid-edit; the next natural render
-      // (their next click, or the tab losing focus) will pick the fresh data up.
-      const ae = document.activeElement;
-      const editing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
-      if (!editing) render();
+      render();
     }
   } catch (e) { /* try again next tick */ }
 }
@@ -267,6 +266,9 @@ async function flushSave(urgent) {
   if (!urgent) {
     try { await loadState(); applyPendingOps(); } catch (e) { /* save what we have */ }
   }
+  // Chip-click saves snapshot an empty note; if the textarea still has text
+  // (debounce hasn't fired), fold it in so this PUT cannot drop it.
+  captureOpenVouchNote();
   const doc = currentStateDoc();
   // Only the ops this write actually covers are retired; an edit made while the
   // request was in flight stays pending for the next one.
@@ -335,8 +337,25 @@ function saveGrade(round, applicantId, field, key, value) {
   queueSave();
 }
 
+function isEditingField() {
+  const ae = document.activeElement;
+  return !!(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'));
+}
+
+function captureOpenVouchNote() {
+  const ta = document.getElementById('vouchNote');
+  if (!ta || !STATE.currentApplicantId) return;
+  getVouch(STATE.currentApplicantId).note = ta.value;
+}
+
 function saveVouch(applicantId) {
-  recordOp({ kind: 'vouch', id: applicantId, value: STATE.vouches[applicantId] });
+  if (STATE.currentApplicantId === applicantId) captureOpenVouchNote();
+  const rec = getVouch(applicantId);
+  recordOp({
+    kind: 'vouch',
+    id: applicantId,
+    value: { by: rec.by.slice(), note: typeof rec.note === 'string' ? rec.note : '' },
+  });
   queueSave();
 }
 
@@ -1604,27 +1623,35 @@ function renderVouchCard(a) {
 }
 
 function bindVouchCard(a) {
-  const v = getVouch(a.id);
   document.querySelectorAll('[data-vouch]').forEach(btn => btn.addEventListener('click', () => {
+    const rec = getVouch(a.id);
     const rid = btn.dataset.vouch;
-    const i = v.by.indexOf(rid);
-    if (i === -1) v.by.push(rid); else v.by.splice(i, 1);
+    const i = rec.by.indexOf(rid);
+    if (i === -1) rec.by.push(rid); else rec.by.splice(i, 1);
     saveVouch(a.id);
     const card = btn.closest('.vouch-card');
     btn.classList.toggle('on');
-    if (card) card.classList.toggle('has', v.by.length > 0);
+    if (card) card.classList.toggle('has', rec.by.length > 0);
     const title = card && card.querySelector('.section-title');
     if (title) {
-      title.innerHTML = v.by.length ? `Vouched for <span class="n">${v.by.length}</span>` : 'Vouch';
+      title.innerHTML = rec.by.length ? `Vouched for <span class="n">${rec.by.length}</span>` : 'Vouch';
     }
   }));
   const note = document.getElementById('vouchNote');
   if (note) {
     let t;
+    function persistNote() {
+      getVouch(a.id).note = note.value;
+      saveVouch(a.id);
+    }
     note.addEventListener('input', () => {
-      v.note = note.value;
+      getVouch(a.id).note = note.value;
       clearTimeout(t);
-      t = setTimeout(() => saveVouch(a.id), 600);
+      t = setTimeout(persistNote, 600);
+    });
+    note.addEventListener('blur', () => {
+      clearTimeout(t);
+      persistNote();
     });
   }
 }
