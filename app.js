@@ -146,7 +146,7 @@ function currentStateDoc() {
       round1: cleanRecords(STATE.grades.round1),
       round2: cleanRecords(STATE.grades.round2),
     },
-    vouches: STATE.vouches,
+    vouches: cleanVouches(STATE.vouches),
     assignments: STATE.assignments,
     groups: STATE.groups,
     updatedAt: Date.now(),
@@ -154,6 +154,18 @@ function currentStateDoc() {
 }
 
 // Only real values are stored: no undefined, no transient __ UI keys, no empty records.
+function cleanVouches(map) {
+  const out = {};
+  Object.keys(map || {}).forEach(function (id) {
+    const v = map[id];
+    if (!v || typeof v !== 'object') return;
+    const by = Array.isArray(v.by) ? v.by.filter(Boolean) : [];
+    const note = typeof v.note === 'string' ? v.note.trim() : '';
+    if (by.length || note) out[id] = { by: by, note: note };
+  });
+  return out;
+}
+
 function cleanRecords(map) {
   const out = {};
   Object.keys(map || {}).forEach(function (id) {
@@ -451,7 +463,9 @@ function isAuto(a, g, key) {
 // ---------------- Grading helpers ----------------
 function getGrade(round, applicantId) {
   if (!STATE.grades[round][applicantId]) STATE.grades[round][applicantId] = { scores: {}, notes: '' };
-  return STATE.grades[round][applicantId];
+  const g = STATE.grades[round][applicantId];
+  if (!g.scores || typeof g.scores !== 'object') g.scores = {};
+  return g;
 }
 
 function screenAverage(g, a) {
@@ -1245,7 +1259,7 @@ function renderVouchCard(a) {
   const v = getVouch(a.id);
   return `
     <div class="card card-pad vouch-card ${v.by.length ? 'has' : ''}">
-      <div class="section-title" style="margin-bottom:4px;">Vouched for ${v.by.length ? `<span class="n">${v.by.length}</span>` : ''}</div>
+      <div class="section-title" style="margin-bottom:4px;">${v.by.length ? `Vouched for <span class="n">${v.by.length}</span>` : 'Vouch'}</div>
       <div class="sub" style="color:var(--slate); font-size:12px; margin-bottom:9px;">
         Tap your name if you know this applicant and want to put your weight behind them.
       </div>
