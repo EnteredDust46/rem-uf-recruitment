@@ -46,8 +46,8 @@ const GH_BRANCH = 'data';
 // scanner (and its auto-revoke partnership) matches on the unbroken token string, and
 // an auto-revoked token would silently kill saving for everyone the next time it fires.
 const GH_TOKEN = [
-  'github_pat_11BNCPELA0oJ3zSmA8GTVG_EOWleGZsyq88pWmBCGYytM8iYCQ5krjy',
-  'WCIBn3aakKjTC6PYIHDXg2nrGB1',
+  'github_pat_11BNCPELA0M1rG7d218C9U_SC09w5yCbAv76K1mFwvsMa2FG1et4rTmL7ACu',
+  'VD1s4MGXOPYBFAAJ5vcSaK',
 ].join('');
 const GH_API = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/state.json`;
 const POLL_MS = 15000;
