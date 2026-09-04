@@ -315,11 +315,11 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
 
-.save-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--slate-faint); display:inline-block; }
-.save-dot.saved { background: var(--good); }
-.save-dot.saving { background: var(--warn); }
-.save-dot.error { background: var(--bad); }
-.save-dot.nodb { background: var(--bad); opacity: .55; }
+.save-dot, .sheet-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--slate-faint); display:inline-block; }
+.save-dot.saved, .sheet-dot.ok { background: var(--good); }
+.save-dot.saving, .sheet-dot.pulling { background: var(--warn); }
+.save-dot.error, .sheet-dot.error, .sheet-dot.denied { background: var(--bad); }
+.save-dot.nodb, .sheet-dot.nokey { background: var(--bad); opacity: .55; }
 
 .recommend-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 

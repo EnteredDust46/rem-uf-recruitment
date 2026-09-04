@@ -1,0 +1,11 @@
+secrets/
+token.json
+client_secret.json
+service-account.json
+*_raw.json
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+rem-uf-for-cursor/
