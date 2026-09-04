@@ -453,7 +453,23 @@ def build_bootstrap(applicants_raw, coffee_raw, info_raw, round1_q=None, existin
         },
         'sources': SOURCES,
     }
+    legacy = load_legacy_assignments()
+    if legacy:
+        bootstrap['legacyAssignments'] = legacy
     return bootstrap, stats
+
+
+def load_legacy_assignments(path='bootstrap.json.txt'):
+    """Keep the locked original-75 group map across roster refreshes."""
+    try:
+        with open(path, encoding='utf-8') as f:
+            existing = json.load(f)
+        locked = existing.get('legacyAssignments') or {}
+        if isinstance(locked, dict) and locked:
+            return locked
+    except Exception:
+        pass
+    return None
 
 
 def write_bootstrap(bootstrap, path='bootstrap.json.txt'):

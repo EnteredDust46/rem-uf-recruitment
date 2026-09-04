@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'meet-members-20260904';
+const BUILD_STAMP = 'group-review-20260904';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -935,6 +935,21 @@ function groupLoad(round, groupId) {
   return poolForRound(round).filter(a => ensureAssignment(round, a.id) === groupId).length;
 }
 
+// A filled review is a real hand-scored record for that round — not auto GPA
+// and not academics N/A alone. One grade record per applicant; the assigned
+// group owns the slot, so this is "how many of our people have a screen," not
+// "how many members of the pair clicked."
+function groupFilled(round, groupId) {
+  return poolForRound(round).filter(function (a) {
+    return ensureAssignment(round, a.id) === groupId && hasManualScore(STATE.grades[round][a.id]);
+  }).length;
+}
+
+function assignmentGroup(round, applicantId) {
+  const gid = ensureAssignment(round, applicantId);
+  return STATE.groups.find(function (g) { return g.id === gid; }) || null;
+}
+
 // ---------------- Rendering: shell ----------------
 const railEl = document.getElementById('rail');
 const contentEl = document.getElementById('content');
@@ -978,7 +993,7 @@ function renderTopbar() {
   if (STATE.view.startsWith('round:')) {
     const round = STATE.view.split(':')[1];
     title = ROUND_LABEL[round]; eyebrow = ROUND_SUB[round];
-  } else if (STATE.view === 'groups') { title = 'Review Groups'; eyebrow = 'Assign reviewers, balance load'; }
+  } else if (STATE.view === 'groups') { title = 'Review Groups'; eyebrow = 'Assigned groups · filled reviews'; }
   else if (STATE.view === 'export') { title = 'Export'; eyebrow = 'Saving, and getting scores into the mastersheet'; }
   else if (STATE.view === 'grade') {
     const a = STATE.byId[STATE.currentApplicantId];
@@ -1053,7 +1068,7 @@ function renderOverview() {
           ${r1Pool.length ? renderDistBars(r1Dist) : emptyNote('No one in the First Round pool yet.')}
         </div>
         <div class="card card-pad">
-          <div class="section-title">Reviewer calibration <span class="n">Application Screen — hand-scored dimensions only</span></div>
+          <div class="section-title">Review group calibration <span class="n">Application Screen — hand-scored dimensions only</span></div>
           ${renderReviewerBias()}
         </div>
       </div>
@@ -1077,11 +1092,15 @@ function renderOverview() {
           </div>
         </div>
         <div class="card card-pad">
-          <div class="section-title">Review groups</div>
-          ${STATE.groups.map(g => `
+          <div class="section-title">Review groups <span class="n">screen filled / assigned</span></div>
+          ${STATE.groups.map(g => {
+            const assigned = groupLoad('screen', g.id);
+            const filled = groupFilled('screen', g.id);
+            return `
             <div class="bar-row"><div class="lbl">${esc(g.name)}</div>
-              <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, groupLoad('screen', g.id) / Math.max(1, total) * 400)}%; background:var(--accent2)"></div></div>
-              <div class="val">${groupLoad('screen', g.id)}</div></div>`).join('')}
+              <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (assigned ? filled / assigned : 0) * 100)}%; background:var(--accent2)"></div></div>
+              <div class="val">${filled}/${assigned}</div></div>`;
+          }).join('')}
           <button class="btn small" style="margin-top:8px;" data-nav="groups">Manage groups →</button>
         </div>
       </div>
@@ -1131,29 +1150,30 @@ function renderDistBars(buckets) {
 
 function renderReviewerBias() {
   const tallies = {};
-  B.reviewers.forEach(r => { tallies[r.id] = { sum: 0, n: 0 }; });
+  STATE.groups.forEach(g => { tallies[g.id] = { sum: 0, n: 0 }; });
   Object.entries(STATE.grades.screen).forEach(([aid, g]) => {
     if (!hasManualScore(g)) return;
-    // credit the pair actually reviewing this applicant, auto-assigned or overridden
-    const grp = STATE.groups.find(x => x.id === ensureAssignment('screen', aid));
+    const grp = assignmentGroup('screen', aid);
     const avg = screenAverage(g);
-    if (avg === null || !grp) return;
-    grp.members.forEach(rid => { if (tallies[rid]) { tallies[rid].sum += avg; tallies[rid].n++; } });
+    if (avg === null || !grp || !tallies[grp.id]) return;
+    tallies[grp.id].sum += avg;
+    tallies[grp.id].n++;
   });
   const overallVals = Object.values(STATE.grades.screen).filter(hasManualScore).map(g => screenAverage(g)).filter(v => v !== null);
   const overall = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
-  const rows = B.reviewers.map(r => {
-    const t = tallies[r.id];
+  const rows = STATE.groups.map(g => {
+    const t = tallies[g.id];
     const avg = t.n ? t.sum / t.n : null;
     const bias = avg !== null && overall !== null ? avg - overall : null;
-    return { r, avg, n: t.n, bias };
-  }).filter(x => x.n > 0);
-  if (!rows.length) return emptyNote('No Application Screen scores yet — calibration appears once reviews start.');
-  return rows.map(({ r, avg, n, bias }) => `
+    const assigned = groupLoad('screen', g.id);
+    return { g, avg, n: t.n, assigned, bias };
+  }).filter(x => x.assigned > 0);
+  if (!rows.some(x => x.n > 0)) return emptyNote('No Application Screen scores yet — calibration appears once reviews start.');
+  return rows.map(({ g, avg, n, assigned, bias }) => `
     <div class="reviewer-bias-row">
-      <div class="nm">${esc(r.name)}</div>
-      <div class="mono">${avg.toFixed(2)}</div>
-      <div class="n">(${n} reviewed)</div>
+      <div class="nm">${esc(g.name)}</div>
+      <div class="mono">${avg !== null ? avg.toFixed(2) : '—'}</div>
+      <div class="n">(${n}/${assigned} filled)</div>
       <div class="topbar-spacer"></div>
       ${bias !== null ? `<span class="chip ${bias > 0.3 ? 'warn' : bias < -0.3 ? 'bad' : 'good'}">${bias > 0 ? '+' : ''}${bias.toFixed(2)} vs. avg</span>` : ''}
     </div>`).join('');
@@ -1245,8 +1265,7 @@ function emptyRoundMessage(round) {
 
 function renderRow(round, a) {
   const score = scoreFor(round, a.id);
-  const gid = ensureAssignment(round, a.id);
-  const grp = STATE.groups.find(g => g.id === gid);
+  const grp = assignmentGroup(round, a.id);
   const maxScale = round === 'round2' ? 24 : round === 'screen' ? 5 : 4;
   const scoreClass = score === null ? 'none' : (round === 'round1' && score < 3) ? 'bad' : (round !== 'round1' && score >= maxScale * 0.75) ? 'good' : '';
   return `<tr class="clickable" role="button" tabindex="0" data-id="${a.id}">
@@ -1303,7 +1322,8 @@ function renderGrade() {
       </div>
       <div style="text-align:right;">
         <div class="avg-display"><span class="big">${fmtScore(round, g, a)}</span><span class="of">${round === 'round2' ? '/ 24' : round === 'round1' ? '/ 4 avg' : '/ 5 avg'}</span></div>
-        <select id="groupPicker" style="margin-top:6px;">
+        <div class="field-label" style="margin-top:8px; text-align:right;">Assigned review group</div>
+        <select id="groupPicker" title="Who is reviewing this application">
           ${STATE.groups.map(gr => `<option value="${gr.id}" ${ensureAssignment(round, a.id) === gr.id ? 'selected' : ''}>${esc(gr.name)}</option>`).join('')}
         </select>
       </div>
@@ -1729,7 +1749,7 @@ function renderGroups() {
     <div class="card card-pad" style="margin-bottom:18px;">
       <div class="section-title">How this works</div>
       <div style="font-size:13.5px; color:var(--ink-soft); max-width:640px;">
-        Applicants are auto-split across the groups below by share, in list order — Aya &amp; Adam carry 22% and the other three pairs 26% each. Reassign anyone individually from their grade view; overrides are saved and stick as new applicants come in from Sync.
+        Each applicant is owned by one review group — that pair is who is reviewing them, not whoever last clicked a score band. Progress is how many of that group's assigned applications have a filled screen. Anyone can still vouch from a profile, including people outside the assigned pair. Reassign from an applicant's grade view; overrides stick as new applications come in.
       </div>
     </div>
     <div class="group-grid">
@@ -1740,11 +1760,17 @@ function renderGroups() {
 
 function renderGroupCard(g) {
   const members = g.members.map(id => REVIEWERS_BY_ID[id]?.name).filter(Boolean).join(' & ');
+  const screenN = groupLoad('screen', g.id);
+  const screenF = groupFilled('screen', g.id);
+  const r1N = groupLoad('round1', g.id);
+  const r1F = groupFilled('round1', g.id);
+  const r2N = groupLoad('round2', g.id);
+  const r2F = groupFilled('round2', g.id);
   return `<div class="card group-card">
     <h4>${esc(g.name)}</h4>
     <div class="members">${esc(members)}</div>
-    <div class="load">${groupLoad('screen', g.id)} <span class="of">/ ${STATE.applicants.length} screen · ${Math.round((g.weight || 0.25) * 100)}% share</span></div>
-    <div class="sub" style="color:var(--slate); font-size:11.5px; margin-top:2px;">${groupLoad('round1', g.id)} first round · ${groupLoad('round2', g.id)} second round</div>
+    <div class="load">${screenF}<span class="of"> / ${screenN} screen filled</span></div>
+    <div class="sub" style="color:var(--slate); font-size:11.5px; margin-top:2px;">${r1F}/${r1N} first round · ${r2F}/${r2N} second round</div>
   </div>`;
 }
 
@@ -1830,7 +1856,7 @@ function buildCsv(round) {
     header = ['Name (First Last)', 'Year', 'Academics', 'Resume', 'Experience & Involvement', 'Leadership & Involvement', 'Application Essay Rating', 'Notes', 'Who is reviewing this application', 'Average', 'Attended Coffee Chats', 'Attended Info Session'];
     rows = STATE.applicants.map(a => {
       const g = STATE.grades.screen[a.id] || { scores: {} };
-      const grp = STATE.groups.find(x => x.id === ensureAssignment('screen', a.id));
+      const grp = assignmentGroup('screen', a.id);
       return [a.name, a.classYear, effScore(a, g, 'academics') ?? '', g.scores.resume ?? '', g.scores.experience ?? '', g.scores.leadership ?? '', g.scores.essay ?? '', g.notes || '', grp ? grp.name : '', screenAverage(g, a) ?? '', a.attendance.coffeeChats.length ? 'Yes' : 'No', a.attendance.infoSession ? 'Yes' : 'No'];
     });
   } else if (round === 'round1') {
