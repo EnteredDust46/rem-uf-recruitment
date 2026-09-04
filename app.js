@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'national-uf-20260904-1';
+const BUILD_STAMP = 'na-gpa-lock-20260904';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -25,7 +25,6 @@ const STATE = {
   filterGroup: 'all',
   filterYear: 'all',
   saveStatus: 'idle',
-  sheetStatus: 'idle',
   lastSync: {},
 };
 STATE.applicants.forEach(a => { STATE.byId[a.id] = a; });
@@ -53,15 +52,6 @@ const GH_TOKEN = [
 ].join('');
 const GH_API = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/state.json`;
 const POLL_MS = 15000;
-const SHEET_POLL_MS = 30000;
-// Restricted Sheets API key for browser reads. Split like GH_TOKEN so
-// push-protection does not match the unbroken string. Leave empty until Adam
-// creates one — the page will show "not pulling — add GOOGLE_API_KEY".
-const GOOGLE_API_KEY = [
-  '',
-  '',
-].join('');
-STATE.sheetStatus = GOOGLE_API_KEY ? 'idle' : 'nokey';
 
 let readOnly = false;
 let liveVersion = null;
@@ -84,12 +74,11 @@ function ghHeaders(extra) {
 async function initCapabilities() {
   await loadState();
   applyPendingOps();
+  seedLegacyAssignments();
+  if (materializeAssignments()) persistAllAssignments();
   render();
-  // Anything stashed before a conflict is re-sent now that we've adopted the latest.
   if (pendingOps().length) queueSave();
   setInterval(pollForUpdates, POLL_MS);
-  pullSheets();
-  setInterval(pullSheets, SHEET_POLL_MS);
 }
 
 // ---------------- Load ----------------
@@ -184,7 +173,7 @@ function cleanRecords(map) {
   const out = {};
   Object.keys(map || {}).forEach(function (id) {
     const rec = cleanForSave(map[id]);
-    if (rec && Object.keys(rec).length && (hasManualScore(rec) || rec.notes || rec.flagSecond || rec.recommendation || rec.caseId)) {
+    if (rec && Object.keys(rec).length && (hasManualScore(rec) || isExplicitAcademicsNA(rec) || rec.notes || rec.flagSecond || rec.recommendation || rec.caseId)) {
       out[id] = rec;
     }
   });
@@ -357,6 +346,7 @@ function saveGroupsAndAssignments() {
 }
 
 function saveAssignment(round, applicantId, groupId) {
+  autoAssignCache.poolKey = null;
   recordOp({ kind: 'assign', round: round, id: applicantId, value: groupId });
   queueSave();
 }
@@ -399,6 +389,7 @@ const PROFILE_FIELDS = APP_FIELDS.filter(function (k) { return k !== 'email'; })
 
 function isUf(u) { return UF_MATCH.test(u || ''); }
 function normName(n) { return (n || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim(); }
+function nameParts(n) { return normName(n).split(/\s+/).filter(Boolean); }
 function emailLocal(e) { return ((e || '').toLowerCase().split('@')[0] || '').replace(/[^a-z]/g, ''); }
 
 function classYearEstimate(gradYearStr) {
@@ -484,7 +475,7 @@ function prepareMatchIndex(applicants) {
   const byEmail = {};
   const byName = {};
   applicants.forEach(function (rec) {
-    const toks = normName(rec.name).split();
+    const toks = nameParts(rec.name);
     const first = toks[0] || '';
     const last = toks.length > 1 ? toks[toks.length - 1] : '';
     rec._first = first;
@@ -510,13 +501,13 @@ function findApplicant(name, email, idx) {
     let hits = idx.applicants.filter(function (a) { return a._keys[lp]; });
     hits = hits.filter(function (a) {
       if (!nm) return true;
-      const parts = nm.split();
+      const parts = nameParts(nm);
       return nm === normName(a.name) || nm === a._first || nm === a._last
         || parts.indexOf(a._first) >= 0 || parts.indexOf(a._last) >= 0;
     });
     if (hits.length === 1) return hits[0];
   }
-  const parts = nm.split();
+  const parts = nameParts(nm);
   if (parts.length >= 2) {
     const hits = idx.applicants.filter(function (a) { return a._first === parts[0] && a._last === parts[parts.length - 1]; });
     if (hits.length === 1) return hits[0];
@@ -600,14 +591,7 @@ function applyAttendance(coffeeRows, infoRows) {
 }
 
 function sheetSources() {
-  return Object.assign({
-    applicationsSheetId: '1M03BJpDREoNr_p_1QfZXzs4xU1fIh6DeDz_VErgqN6g',
-    applicationsTab: 'Sheet1',
-    coffeeChatResponsesSheetId: '1sIhs4I2i53mmH2cUObWarBDnJ06-nDl53nVflkZAnBo',
-    coffeeChatTab: 'Form Responses 1',
-    infoSessionResponsesSheetId: '1AamE6ob5DW5LhvAVodZsocQiyNz7_P_SLXhFeSmgbkQ',
-    infoSessionTab: 'Info Session Attendances',
-  }, B.sources || {});
+  return B.sources || {};
 }
 
 function headerIndex(headers, needles) {
@@ -667,85 +651,9 @@ function parseInfoRows(values) {
   }).filter(function (c) { return c.name || c.email; });
 }
 
-function a1Range(tab, cells) {
-  const t = String(tab || '');
-  const quoted = /[^A-Za-z0-9_]/.test(t) ? "'" + t.replace(/'/g, "''") + "'" : t;
-  return quoted + '!' + cells;
-}
-
-async function sheetsValues(spreadsheetId, range) {
-  const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId)
-    + '/values/' + encodeURIComponent(range) + '?key=' + encodeURIComponent(GOOGLE_API_KEY);
-  const res = await fetch(url, { cache: 'no-store' });
-  if (res.status === 403 || res.status === 401) {
-    const err = new Error('denied');
-    err.code = 'denied';
-    throw err;
-  }
-  if (!res.ok) {
-    const err = new Error('http ' + res.status);
-    err.code = 'error';
-    throw err;
-  }
-  const json = await res.json();
-  return json.values || [];
-}
-
-function setSheetStatus(s, extra) {
-  STATE.sheetStatus = s;
-  STATE.sheetExtra = extra || '';
-  const dot = document.getElementById('sheetDot');
-  if (dot) { dot.className = 'sheet-dot ' + s; dot.title = sheetLabelText(); }
-  const lbl = document.getElementById('sheetLabel');
-  if (lbl) lbl.textContent = sheetLabelText();
-}
-
-function sheetLabelText() {
-  if (!GOOGLE_API_KEY) return 'not pulling — add GOOGLE_API_KEY';
-  if (STATE.sheetStatus === 'pulling') return 'sheets…';
-  if (STATE.sheetStatus === 'denied') return 'sheets blocked — share or key';
-  if (STATE.sheetStatus === 'error') return 'sheets failed';
-  if (STATE.sheetStatus === 'ok') {
-    return STATE.sheetExtra || ('sheets · ' + STATE.applicants.length + ' UF');
-  }
-  return 'sheets idle';
-}
-
-let sheetsPulling = false;
-async function pullSheets() {
-  if (!GOOGLE_API_KEY) { setSheetStatus('nokey'); return; }
-  if (sheetsPulling) return;
-  sheetsPulling = true;
-  setSheetStatus('pulling');
-  const src = sheetSources();
-  try {
-    const jobs = [
-      sheetsValues(src.applicationsSheetId, a1Range(src.applicationsTab || 'Sheet1', 'A1:Z')),
-      sheetsValues(src.coffeeChatResponsesSheetId, a1Range(src.coffeeChatTab || 'Form Responses 1', 'A1:Z')),
-    ];
-    if (src.infoSessionResponsesSheetId) {
-      jobs.push(sheetsValues(src.infoSessionResponsesSheetId, a1Range(src.infoSessionTab || 'Info Session Attendances', 'A1:Z')));
-    }
-    const results = await Promise.all(jobs);
-    const apps = parseApplicationRows(results[0]);
-    const coffee = parseCoffeeRows(results[1]);
-    const info = results[2] ? parseInfoRows(results[2]) : null;
-    const added = mergeApplicants(apps);
-    applyAttendance(coffee, info);
-    setSheetStatus('ok', 'sheets · ' + STATE.applicants.length + ' UF');
-    const ae = document.activeElement;
-    const editing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
-    if ((added || true) && !editing) render();
-  } catch (e) {
-    setSheetStatus((e && e.code) || 'error');
-  }
-  sheetsPulling = false;
-}
-
 // ---------------- Auto-scoring (formulaic dimensions) ----------------
-// Academics is the one screen dimension the rubric decides outright: the band is a
-// function of GPA and class year. Parse it once per applicant, score it, and let the
-// reviewer override by clicking any other band.
+// College GPA auto-maps to a 4/3/2/1 band. High-school / incoming-freshman GPA
+// defaults to N/A and is not weighted unless a reviewer clicks a numeric band.
 const YEAR_KEYS = ['Freshman', 'Sophomore', 'Junior'];
 const GPA_THRESHOLDS = {
   Freshman: [3.9, 3.7, 3.5],
@@ -772,10 +680,9 @@ function parseGpa(raw, classYear) {
   if (onScale.length > 1) return { value: null, basis: null, reason: 'More than one GPA listed' };
 
   const value = onScale[0];
-  // Freshmen have no college GPA yet — the rubric's freshman band reads their high-school GPA.
   if (classYear === 'Freshman') {
     if (offScale.length) return { value: null, basis: 'highschool', reason: 'Weighted and unweighted GPAs both listed' };
-    return { value: value, basis: 'highschool', label: 'high-school GPA', reason: 'High-school GPA (freshman)' };
+    return { value: value, basis: 'highschool', label: 'high-school GPA', reason: 'High-school GPA (freshman) — not scored' };
   }
   if (hsMarker && collegeNA) return { value: null, basis: 'highschool', reason: 'Only a high-school GPA on file — no college GPA yet' };
   if (hsMarker) return { value: null, basis: 'highschool', reason: 'GPA is labelled high-school — confirm before scoring' };
@@ -788,7 +695,7 @@ function autoFor(a) {
   const gpa = parseGpa(a.gpa, a.classYear);
   const t = GPA_THRESHOLDS[yearKeyFor(a)];
   let academics = null;
-  if (gpa.value != null) {
+  if (gpa.value != null && gpa.basis === 'college') {
     academics = gpa.value >= t[0] ? 4 : gpa.value >= t[1] ? 3 : gpa.value >= t[2] ? 2 : 1;
   }
   const res = { gpa: gpa, scores: { academics: academics } };
@@ -797,14 +704,25 @@ function autoFor(a) {
 }
 
 // The score that counts: a reviewer's own click always wins; otherwise the rubric's own answer.
+function isExplicitAcademicsNA(g) {
+  return !!(g && g.scores && g.scores.academics === 'NA');
+}
+function academicsIsNA(a, g) {
+  if (g && g.scores && g.scores.academics === 'NA') return true;
+  if (g && g.scores && typeof g.scores.academics === 'number') return false;
+  return typeof autoFor(a).scores.academics !== 'number';
+}
+
 function effScore(a, g, key) {
-  const v = g.scores[key];
+  const v = g && g.scores ? g.scores[key] : undefined;
+  if (v === 'NA') return undefined;
   if (typeof v === 'number') return v;
   const auto = autoFor(a).scores[key];
   return typeof auto === 'number' ? auto : undefined;
 }
 function isAuto(a, g, key) {
-  return typeof g.scores[key] !== 'number' && typeof autoFor(a).scores[key] === 'number';
+  if (g && g.scores && (typeof g.scores[key] === 'number' || g.scores[key] === 'NA')) return false;
+  return typeof autoFor(a).scores[key] === 'number';
 }
 
 // ---------------- Grading helpers ----------------
@@ -866,10 +784,19 @@ function groupWeights() {
 }
 
 const autoAssignCache = { round: null, poolKey: null, map: {} };
+function assignmentCacheKey(round) {
+  const pool = poolForRound(round);
+  const locked = STATE.assignments[round] || {};
+  return round + ':' + pool.map(a => a.id).join(',')
+    + ':' + STATE.groups.map(g => g.id + (g.weight || 1)).join('|')
+    + ':' + Object.keys(locked).sort().map(id => id + locked[id]).join('|');
+}
+
+// Locked ids (legacy original-75 + any saved override) keep their group.
+// Only people without an override are placed into leftover quota, in list order.
 function autoAssignments(round) {
   const pool = poolForRound(round);
-  const poolKey = round + ':' + pool.length + ':' + pool.map(a => a.id).join(',').length
-    + ':' + STATE.groups.map(g => g.id + (g.weight || 1)).join('|');
+  const poolKey = assignmentCacheKey(round);
   if (autoAssignCache.poolKey === poolKey) return autoAssignCache.map;
 
   const weights = groupWeights();
@@ -877,17 +804,25 @@ function autoAssignments(round) {
   const exact = weights.map(w => w * n);
   const quotas = exact.map(Math.floor);
   let left = n - quotas.reduce((a, b) => a + b, 0);
-  // hand the leftovers to the largest fractional parts
   const order = exact.map((e, i) => ({ i, frac: e - Math.floor(e) }))
     .sort((a, b) => b.frac - a.frac);
   for (let k = 0; k < left; k++) quotas[order[k % order.length].i]++;
 
-  const map = {};
-  let gi = 0, taken = 0;
+  const locked = STATE.assignments[round] || {};
+  const used = {};
+  STATE.groups.forEach(g => { used[g.id] = 0; });
   pool.forEach(a => {
-    while (gi < quotas.length - 1 && taken >= quotas[gi]) { gi++; taken = 0; }
-    map[a.id] = STATE.groups[gi] ? STATE.groups[gi].id : null;
-    taken++;
+    if (locked[a.id]) used[locked[a.id]] = (used[locked[a.id]] || 0) + 1;
+  });
+
+  const map = {};
+  let gi = 0;
+  pool.forEach(a => {
+    if (locked[a.id]) { map[a.id] = locked[a.id]; return; }
+    while (gi < STATE.groups.length - 1 && used[STATE.groups[gi].id] >= quotas[gi]) gi++;
+    const gid = STATE.groups[gi] ? STATE.groups[gi].id : null;
+    map[a.id] = gid;
+    if (gid) used[gid] = (used[gid] || 0) + 1;
   });
   autoAssignCache.poolKey = poolKey;
   autoAssignCache.map = map;
@@ -895,8 +830,47 @@ function autoAssignments(round) {
 }
 
 function ensureAssignment(round, applicantId) {
-  if (STATE.assignments[round][applicantId]) return STATE.assignments[round][applicantId];
+  if (STATE.assignments[round] && STATE.assignments[round][applicantId]) {
+    return STATE.assignments[round][applicantId];
+  }
   return autoAssignments(round)[applicantId] || null;
+}
+
+function seedLegacyAssignments() {
+  const locked = B.legacyAssignments || {};
+  ['screen', 'round1'].forEach(function (round) {
+    if (!STATE.assignments[round]) STATE.assignments[round] = {};
+    Object.keys(locked).forEach(function (id) {
+      if (!STATE.byId[id]) return;
+      if (!STATE.assignments[round][id]) STATE.assignments[round][id] = locked[id];
+    });
+  });
+  autoAssignCache.poolKey = null;
+}
+
+function materializeAssignments() {
+  let added = 0;
+  ['screen', 'round1'].forEach(function (round) {
+    if (!STATE.assignments[round]) STATE.assignments[round] = {};
+    const map = autoAssignments(round);
+    poolForRound(round).forEach(function (a) {
+      if (!STATE.assignments[round][a.id] && map[a.id]) {
+        STATE.assignments[round][a.id] = map[a.id];
+        added++;
+      }
+    });
+  });
+  if (added) autoAssignCache.poolKey = null;
+  return added;
+}
+
+function persistAllAssignments() {
+  ROUNDS.forEach(function (round) {
+    Object.keys(STATE.assignments[round] || {}).forEach(function (id) {
+      recordOp({ kind: 'assign', round: round, id: id, value: STATE.assignments[round][id] });
+    });
+  });
+  queueSave();
 }
 
 function poolForRound(round) {
@@ -969,7 +943,6 @@ function renderTopbar() {
   topbarEl.innerHTML = `
     <div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1></div>
     <div class="topbar-spacer"></div>
-    <span class="sync-note"><span class="sheet-dot ${STATE.sheetStatus}" id="sheetDot"></span><span id="sheetLabel">${sheetLabelText()}</span></span>
     <span class="sync-note"><span class="save-dot ${STATE.saveStatus}" id="saveDot"></span><span id="saveLabel">${saveLabelText()}</span></span>
   `;
 }
@@ -1045,7 +1018,7 @@ function renderOverview() {
             <div class="bar-row"><div class="lbl">${esc(y)}</div>
               <div class="bar-track"><div class="bar-fill" style="width:${(n / maxYear) * 100}%"></div></div>
               <div class="val">${n}</div></div>`).join('')}
-          <div class="sub" style="margin-top:10px; color:var(--slate);">Academics auto-scored from GPA for ${autoCount} of ${total} — the other ${total - autoCount} list a weighted or missing GPA and need a human read.</div>
+          <div class="sub" style="margin-top:10px; color:var(--slate);">College GPA auto-scored academics for ${autoCount} of ${total}. High-school-only freshmen and incoming / N/A responses default to N/A and are not in the average.</div>
         </div>
         <div class="card card-pad">
           <div class="section-title">Recruitment funnel</div>
@@ -1229,7 +1202,7 @@ function renderRow(round, a) {
   const grp = STATE.groups.find(g => g.id === gid);
   const maxScale = round === 'round2' ? 24 : round === 'screen' ? 5 : 4;
   const scoreClass = score === null ? 'none' : (round === 'round1' && score < 3) ? 'bad' : (round !== 'round1' && score >= maxScale * 0.75) ? 'good' : '';
-  return `<tr class="clickable" data-id="${a.id}">
+  return `<tr class="clickable" role="button" tabindex="0" data-id="${a.id}">
     <td><div class="name-cell"><span class="nm">${esc(a.name)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
     <td>${gpaCell(a)}</td>
     <td>${esc(truncate(a.position, 28))}</td>
@@ -1244,6 +1217,9 @@ function gpaCell(a) {
   const auto = autoFor(a);
   if (auto.gpa.value == null) {
     return `<span class="gpa-cell none" title="${esc(auto.gpa.reason)}">${esc(truncate(a.gpa || '—', 12))}</span>`;
+  }
+  if (typeof auto.scores.academics !== 'number') {
+    return `<span class="gpa-cell" title="${esc(auto.gpa.reason)}"><span class="mono">${auto.gpa.value.toFixed(2)}</span><span class="auto-pill na" title="High-school / incoming GPA is not scored">N/A</span></span>`;
   }
   return `<span class="gpa-cell"><span class="mono">${auto.gpa.value.toFixed(2)}</span><span class="auto-pill" title="Auto-scored ${auto.scores.academics}/4 on the ${yearKeyFor(a)} scale">${auto.scores.academics}</span></span>`;
 }
@@ -1260,6 +1236,8 @@ function renderGrade() {
   const a = STATE.byId[STATE.currentApplicantId];
   const round = STATE.gradeRound || 'screen';
   if (!a) { contentEl.innerHTML = emptyNote('Applicant not found.'); return; }
+  if (!a.attendance) a.attendance = { coffeeChats: [], infoSession: null, meetMembers: null };
+  if (!Array.isArray(a.attendance.coffeeChats)) a.attendance.coffeeChats = [];
   const g = getGrade(round, a.id);
 
   contentEl.innerHTML = `
@@ -1360,35 +1338,37 @@ function renderScreenGrade(a, g) {
     const autoable = typeof autoVal === 'number';
     const usingAuto = autoable && isAuto(a, g, d.key);
     const overridden = autoable && typeof g.scores[d.key] === 'number' && g.scores[d.key] !== autoVal;
+    const academicsNA = d.key === 'academics' && academicsIsNA(a, g);
     let hint = '';
     if (d.key === 'academics') {
       if (autoable) {
         hint = `<div class="auto-note ${overridden ? 'overridden' : ''}">
           ${overridden
             ? `Scored by hand. The rubric reads their <strong>${auto.gpa.value}</strong> ${esc(auto.gpa.label)} as a <strong>${autoVal}</strong> on the ${yearKeyFor(a)} scale — <button class="linkbtn" data-resetauto="${d.key}">reset to auto</button>`
-            : `Filled from the rubric: <strong>${auto.gpa.value}</strong> ${esc(auto.gpa.label)} → <strong>${autoVal}</strong> on the ${yearKeyFor(a)} scale. Click any band to override.`}
+            : `Filled from college GPA: <strong>${auto.gpa.value}</strong> ${esc(auto.gpa.label)} → <strong>${autoVal}</strong> on the ${yearKeyFor(a)} scale. Click any band or N/A to override.`}
         </div>`;
       } else {
-        hint = `<div class="auto-note needs">Couldn't score this automatically — ${esc(auto.gpa.reason)}. Listed as <em>${esc(a.gpa || 'blank')}</em>${a.classYear === 'Freshman' ? '. Note the rubric puts "not listed" in the bottom band.' : ''}</div>`;
+        hint = `<div class="auto-note needs">Academics defaults to <strong>N/A</strong> (not in the average) — ${esc(auto.gpa.reason)}. Listed as <em>${esc(a.gpa || 'blank')}</em>. Click a 4/3/2/1 band to score, or leave N/A.</div>`;
       }
     }
     return `
     <div class="dim-card">
       <div class="dim-head">
         <h4>${esc(d.label)}</h4>
-        ${usingAuto ? '<span class="chip auto">Auto</span>' : ''}
+        ${usingAuto ? '<span class="chip auto">Auto</span>' : (d.key === 'academics' && academicsNA ? '<span class="chip auto">N/A</span>' : '')}
         <span class="chip static">0–4</span>
       </div>
       <div class="dim-body">
         <div class="year-tabs" data-dim="${d.key}">
           ${yearKeys.map(y => `<span class="year-tab ${g.__yearTab === y ? 'sel' : ''}" data-year="${y}">${y}${y === a.classYear ? ' (applicant)' : ''}</span>`).join('')}
         </div>
-        <div class="band-row">
+        <div class="band-row"${d.key === 'academics' ? ' style="grid-template-columns: repeat(5,1fr);"' : ''}>
           ${d.bands[g.__yearTab].map((txt, i) => {
             const score = 4 - i;
-            const sel = effScore(a, g, d.key) === score;
-            return `<div class="band-opt ${sel ? 'sel' : ''} ${sel && usingAuto ? 'auto' : ''}" data-key="${d.key}" data-val="${score}"><span class="sc">${i === 3 ? '1–0' : score}</span>${esc(txt)}</div>`;
+            const sel = !academicsNA && effScore(a, g, d.key) === score;
+            return `<div class="band-opt ${sel ? 'sel' : ''} ${sel && usingAuto ? 'auto' : ''}" role="button" tabindex="0" data-key="${d.key}" data-val="${score}"><span class="sc">${i === 3 ? '1–0' : score}</span>${esc(txt)}</div>`;
           }).join('')}
+          ${d.key === 'academics' ? `<div class="band-opt ${academicsNA ? 'sel' : ''}" role="button" tabindex="0" data-key="academics" data-val="NA"><span class="sc">N/A</span>High-school / incoming / not comparable — skipped in the average</div>` : ''}
         </div>
         ${hint}
       </div>
@@ -1409,8 +1389,8 @@ function renderScreenGrade(a, g) {
     </div>
   `;
   main.querySelectorAll('.band-opt').forEach(el => el.addEventListener('click', () => {
-    const key = el.dataset.key, val = Number(el.dataset.val);
-    // Clicking the current manual pick clears it — which falls back to the auto score if there is one.
+    const key = el.dataset.key;
+    const val = el.dataset.val === 'NA' ? 'NA' : Number(el.dataset.val);
     g.scores[key] = g.scores[key] === val ? undefined : val;
     saveGrade('screen', a.id, 'score', key, g.scores[key]);
     renderScreenGrade(a, g); renderGradeSide(a, 'screen', g); updateHeaderScore('screen', g, a);
@@ -1580,9 +1560,9 @@ function renderGradeSide(a, round, g) {
     </div>
     <div class="card card-pad">
       <div class="section-title" style="margin-bottom:6px;">Attendance</div>
-      ${attendanceRow('Coffee chat', a.attendance.coffeeChats.length > 0, a.attendance.coffeeChats.map(c => c.spokeTo).join('; '))}
-      ${attendanceRow('Info session', !!a.attendance.infoSession, a.attendance.infoSession ? a.attendance.infoSession.session : '')}
-      ${attendanceRow('Meet the Members', !!a.attendance.meetMembers, '')}
+      ${coffeeAttendanceBlock(a)}
+      ${attendanceRow('Info session', !!(a.attendance && a.attendance.infoSession), a.attendance && a.attendance.infoSession ? (a.attendance.infoSession.session || a.attendance.infoSession.timestamp || 'checked in') : '')}
+      ${attendanceRow('Meet the Members', !!(a.attendance && a.attendance.meetMembers), '')}
     </div>
     ${renderVouchCard(a)}
   `;
@@ -1633,8 +1613,10 @@ function bindVouchCard(a) {
     const card = btn.closest('.vouch-card');
     btn.classList.toggle('on');
     if (card) card.classList.toggle('has', v.by.length > 0);
-    const n = card && card.querySelector('.section-title .n');
-    if (n) n.textContent = v.by.length; else if (card) render();
+    const title = card && card.querySelector('.section-title');
+    if (title) {
+      title.innerHTML = v.by.length ? `Vouched for <span class="n">${v.by.length}</span>` : 'Vouch';
+    }
   }));
   const note = document.getElementById('vouchNote');
   if (note) {
@@ -1655,6 +1637,26 @@ function vouchNames(applicantId) {
 
 function attendanceRow(label, yes, detail) {
   return `<div class="attendance-row ${yes ? 'yes' : 'no'}"><span class="ic">${yes ? '●' : '○'}</span><strong>${label}</strong>${detail ? `<span class="sub" style="color:var(--slate); font-size:12px;">— ${esc(detail)}</span>` : ''}</div>`;
+}
+
+function coffeeAttendanceBlock(a) {
+  const chats = (a.attendance && a.attendance.coffeeChats) || [];
+  if (!chats.length) return attendanceRow('Coffee chat', false, '');
+  const items = chats.map(function (c) {
+    const who = String(c.spokeTo || '').trim();
+    const when = String(c.timestamp || '').trim();
+    if (who && when) return 'Spoke with ' + who + ' · ' + when;
+    if (who) return 'Spoke with ' + who;
+    if (when) return 'Signed in ' + when + ' (host not listed)';
+    return 'Signed in (host not listed)';
+  });
+  return `<div class="attendance-row yes">
+    <span class="ic">●</span>
+    <div class="att-detail">
+      <strong>Coffee chat${chats.length > 1 ? 's' : ''}</strong>
+      <ul class="spoke-list">${items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('')}</ul>
+    </div>
+  </div>`;
 }
 
 // ---------------- Groups view ----------------
@@ -1698,10 +1700,10 @@ function renderExport() {
     <div class="card card-pad" style="margin-bottom:16px;">
       <div class="section-title">Export for the official mastersheet</div>
       <div style="font-size:13.5px; color:var(--ink-soft); max-width:640px; margin-bottom:12px;">
-        Roster and attendance now come from the Google Sheets themselves (once an API key is in
-        <code>app.js</code>). To write scores <em>back</em> to the sheet, run
-        <code>python push_scores.py</code> — that matches by email and only includes people with a
-        hand-entered score. CSV below is the same column layout if you still want a local copy.
+        Roster and attendance are baked into this page from the latest sign-in sheets. To write
+        scores <em>back</em> to the mastersheet, run <code>python push_scores.py</code> — that
+        matches by email and only includes people with a hand-entered score. CSV below is the
+        same column layout if you still want a local copy.
       </div>
       <div class="btn-row">
         <button class="btn" data-export="screen">Application Screen CSV</button>

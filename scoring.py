@@ -49,7 +49,7 @@ def auto_for(a, cache=None):
     gpa = parse_gpa(a.get('gpa'), a.get('classYear'))
     t = GPA_THRESHOLDS[year_key_for(a)]
     academics = None
-    if gpa['value'] is not None:
+    if gpa.get('value') is not None and gpa.get('basis') == 'college':
         v = gpa['value']
         academics = 4 if v >= t[0] else 3 if v >= t[1] else 2 if v >= t[2] else 1
     res = {'gpa': gpa, 'scores': {'academics': academics}}
@@ -61,6 +61,8 @@ def auto_for(a, cache=None):
 def eff_score(a, g, key, cache=None):
     scores = (g or {}).get('scores') or {}
     v = scores.get(key)
+    if v in ('NA', 'N/A'):
+        return None
     if isinstance(v, (int, float)):
         return v
     auto = auto_for(a, cache)['scores'].get(key)
