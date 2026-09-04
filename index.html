@@ -443,6 +443,7 @@ window.BOOTSTRAP = {"meta": {"builtAt": "2026-09-04", "applicantCount": 75, "cof
 'use strict';
 
 const B = window.BOOTSTRAP;
+const BUILD_STAMP = 'persist-check-20260904';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -684,6 +685,10 @@ async function flushSave() {
   clearTimeout(saveTimer);
   if (readOnly || saving) return;
   saving = true;
+  // Pull the latest shared file first so a stale tab cannot overwrite newer
+  // scores with an older in-memory copy. Local edits already sit in pendingOps
+  // and get replayed on top of whatever we just adopted.
+  try { await loadState(); applyPendingOps(); } catch (e) { /* save what we have */ }
   const doc = currentStateDoc();
   // Only the ops this write actually covers are retired; an edit made while the
   // request was in flight stays pending for the next one.
