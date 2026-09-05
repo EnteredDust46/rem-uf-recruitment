@@ -418,4 +418,10 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
   color: var(--accent2); font-family: var(--font-mono);
   font-size: 10.5px; font-weight: 700; vertical-align: middle;
 }
+.late-badge {
+  margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  background: var(--warn-soft); color: var(--warn);
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  vertical-align: middle;
+}
 .muted-note { color: var(--slate-faint); font-size: 12px; }

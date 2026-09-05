@@ -202,6 +202,7 @@ def applicant_record(a, aid):
         'accommodations': a.get('accommodations') or '',
         'other': a.get('other') or '',
         'commitment': a.get('commitment') or '',
+        'late': bool(a.get('late')),
         'attendance': {
             'coffeeChats': [],
             'infoSession': None,

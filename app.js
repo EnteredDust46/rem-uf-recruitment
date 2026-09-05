@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'group-review-20260904';
+const BUILD_STAMP = 'late-mtm-20260905';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -409,6 +409,45 @@ const PROFILE_FIELDS = APP_FIELDS.filter(function (k) { return k !== 'email'; })
 function isUf(u) { return UF_MATCH.test(u || ''); }
 function normName(n) { return (n || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim(); }
 function nameParts(n) { return normName(n).split(/\s+/).filter(Boolean); }
+const LATE_CUTOFF_UTC = Date.UTC(2026, 8, 5, 3, 59, 59);
+function nthSunday(year, month1, n) {
+  const first = new Date(Date.UTC(year, month1 - 1, 1));
+  const dow = first.getUTCDay();
+  const firstSun = dow === 0 ? 1 : 8 - dow;
+  return firstSun + (n - 1) * 7;
+}
+function isEDT(year, month, day, hour) {
+  const startDay = nthSunday(year, 3, 2);
+  const endDay = nthSunday(year, 11, 1);
+  if (month > 3 && month < 11) return true;
+  if (month < 3 || month > 11) return false;
+  if (month === 3) return day > startDay || (day === startDay && hour >= 2);
+  return day < endDay || (day === endDay && hour < 2);
+}
+function parseSheetTs(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s) || /Z$/i.test(s) || /[+-]\d{2}:\d{2}$/.test(s)) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d.getTime();
+  }
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m) {
+    const year = +m[3], month = +m[1], day = +m[2];
+    const hour = +(m[4] || 0), min = +(m[5] || 0), sec = +(m[6] || 0);
+    const offset = isEDT(year, month, day, hour) ? 4 : 5;
+    return Date.UTC(year, month - 1, day, hour + offset, min, sec);
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
+}
+function isLateApp(ts) {
+  const t = parseSheetTs(ts);
+  return t != null && t > LATE_CUTOFF_UTC;
+}
+function lateBadge(a) {
+  return a && a.late ? '<span class="late-badge" title="Submitted after 11:59 PM ET on Sep 4, 2026">Late</span>' : '';
+}
 function emailLocal(e) { return ((e || '').toLowerCase().split('@')[0] || '').replace(/[^a-z]/g, ''); }
 
 function classYearEstimate(gradYearStr) {
@@ -545,6 +584,8 @@ function refreshApplicantFields(dest, src) {
     if (src[k] != null && src[k] !== '') dest[k] = src[k];
   });
   if (src.gradYear) dest.classYear = classYearEstimate(src.gradYear);
+  if (src.timestamp) dest.late = isLateApp(src.timestamp);
+  else if (typeof src.late === 'boolean') dest.late = src.late;
   if (typeof AUTO_CACHE === 'object' && dest.id) delete AUTO_CACHE[dest.id];
 }
 
@@ -575,8 +616,9 @@ function mergeApplicants(list) {
     used[id] = true;
     const rec = Object.assign({
       classYear: classYearEstimate(a.gradYear),
+      late: isLateApp(a.timestamp),
       attendance: { coffeeChats: [], infoSession: null, meetMembers: null },
-    }, a, { id: id });
+    }, a, { id: id, late: typeof a.late === 'boolean' ? a.late : isLateApp(a.timestamp) });
     if (!rec.attendance) rec.attendance = { coffeeChats: [], infoSession: null, meetMembers: null };
     if (!Array.isArray(rec.attendance.coffeeChats)) rec.attendance.coffeeChats = [];
     STATE.applicants.push(rec);
@@ -1054,6 +1096,8 @@ function renderOverview() {
       ${statTile('First Round', `${r1Scored}/${r1Pool.length}`, `scored · ≥${B.rubrics.round1.advanceThreshold} avg advances`)}
       ${statTile('Second Round pool', r2Pool.length, r2Pool.length ? `${r2Scored} scored` : 'advances from First Round')}
       ${statTile('Coffee chat contact', coffeeCount, `of ${total} applicants`)}
+      ${statTile('Meet the Members', meetCount, `of ${total} applicants`)}
+      ${statTile('Late applications', STATE.applicants.filter(a => a.late).length, 'after Sep 4 11:59 PM ET')}
       ${statTile('Vouched for', vouchedCount, vouchedCount ? 'by an exec member' : 'no vouches yet')}
     </div>
 
@@ -1269,7 +1313,7 @@ function renderRow(round, a) {
   const maxScale = round === 'round2' ? 24 : round === 'screen' ? 5 : 4;
   const scoreClass = score === null ? 'none' : (round === 'round1' && score < 3) ? 'bad' : (round !== 'round1' && score >= maxScale * 0.75) ? 'good' : '';
   return `<tr class="clickable" role="button" tabindex="0" data-id="${a.id}">
-    <td><div class="name-cell"><span class="nm">${esc(a.name)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
+    <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
     <td>${gpaCell(a)}</td>
     <td>${esc(truncate(a.position, 28))}</td>
     <td>${attendanceIcons(a)}</td>
@@ -1310,7 +1354,7 @@ function renderGrade() {
     <button class="btn ghost small" id="backBtn">← Back to ${esc(ROUND_LABEL[round])}</button>
     <div class="applicant-header" style="margin-top:10px;">
       <div>
-        <h2>${esc(a.name)}</h2>
+        <h2>${esc(a.name)}${lateBadge(a)}</h2>
         <div class="meta">
           <span>🎓 ${esc(a.university)}</span>
           <span>${esc(a.classYear)} · Class of ${esc(a.gradYear)}</span>
@@ -1853,11 +1897,11 @@ function csvEscape(v) {
 function buildCsv(round) {
   let header, rows;
   if (round === 'screen') {
-    header = ['Name (First Last)', 'Year', 'Academics', 'Resume', 'Experience & Involvement', 'Leadership & Involvement', 'Application Essay Rating', 'Notes', 'Who is reviewing this application', 'Average', 'Attended Coffee Chats', 'Attended Info Session'];
+    header = ['Name (First Last)', 'Year', 'Late', 'Academics', 'Resume', 'Experience & Involvement', 'Leadership & Involvement', 'Application Essay Rating', 'Notes', 'Who is reviewing this application', 'Average', 'Attended Coffee Chats', 'Attended Info Session', 'Attended Meet the Members'];
     rows = STATE.applicants.map(a => {
       const g = STATE.grades.screen[a.id] || { scores: {} };
       const grp = assignmentGroup('screen', a.id);
-      return [a.name, a.classYear, effScore(a, g, 'academics') ?? '', g.scores.resume ?? '', g.scores.experience ?? '', g.scores.leadership ?? '', g.scores.essay ?? '', g.notes || '', grp ? grp.name : '', screenAverage(g, a) ?? '', a.attendance.coffeeChats.length ? 'Yes' : 'No', a.attendance.infoSession ? 'Yes' : 'No'];
+      return [a.name, a.classYear, a.late ? 'Late' : '', effScore(a, g, 'academics') ?? '', g.scores.resume ?? '', g.scores.experience ?? '', g.scores.leadership ?? '', g.scores.essay ?? '', g.notes || '', grp ? grp.name : '', screenAverage(g, a) ?? '', a.attendance.coffeeChats.length ? 'Yes' : 'No', a.attendance.infoSession ? 'Yes' : 'No', a.attendance.meetMembers ? 'Yes' : 'No'];
     });
   } else if (round === 'round1') {
     header = ['Candidate (First & Last) Name', 'Candidates School Email', 'Fit Q1', 'Fit Q2', 'Fit Q3', 'Personal Q1', 'Personal Q2', 'Personal Q3', 'Personality Q', 'Average Score', 'Recommendation', 'Notes'];

@@ -12,3 +12,4 @@ rem-uf-for-cursor/
 *.csv
 *.csv.tmp
 refresh_once.log
+_refresh_csv/
