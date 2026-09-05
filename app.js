@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'late-mtm-20260905';
+const BUILD_STAMP = 'group-queue-wts-20260905';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -23,6 +23,9 @@ const STATE = {
   sortDir: 'asc',
   screenedOnly: false,
   filterGroup: 'all',
+  incompleteOnly: false,
+  queueTrail: [],
+  queueDone: false,
   filterYear: 'all',
   saveStatus: 'idle',
   lastSync: {},
@@ -820,11 +823,32 @@ function getGrade(round, applicantId) {
   return g;
 }
 
+// Application Screen average: GPA 10 · Essay 30 · Resume / Experience / Leadership 20 each.
+// Missing or N/A dimensions drop out and the rest is renormalized so a freshman
+// isn't punished for an unscored high-school GPA.
+const SCREEN_WEIGHTS = { academics: 0.10, essay: 0.30, resume: 0.20, experience: 0.20, leadership: 0.20 };
+const SCREEN_WEIGHT_NOTE = 'Screen average: GPA 10% · Essay 30% · Resume / Experience / Leadership 20% each';
+
 function screenAverage(g, a) {
-  const dims = B.rubrics.screen.dims.map(d => d.key).concat(['essay']);
-  const vals = dims.map(k => (a ? effScore(a, g, k) : g.scores[k])).filter(v => typeof v === 'number');
-  if (!vals.length) return null;
-  return vals.reduce((x, y) => x + y, 0) / vals.length;
+  if (!a && g && STATE.grades && STATE.grades.screen) {
+    const ids = Object.keys(STATE.grades.screen);
+    for (let i = 0; i < ids.length; i++) {
+      if (STATE.grades.screen[ids[i]] === g) { a = STATE.byId[ids[i]]; break; }
+    }
+  }
+  const dims = ['academics', 'resume', 'experience', 'leadership', 'essay'];
+  let wsum = 0, vsum = 0;
+  for (let i = 0; i < dims.length; i++) {
+    const k = dims[i];
+    const v = a ? effScore(a, g, k) : (g && g.scores && typeof g.scores[k] === 'number' ? g.scores[k] : undefined);
+    if (typeof v !== 'number') continue;
+    const w = SCREEN_WEIGHTS[k];
+    if (!w) continue;
+    vsum += v * w;
+    wsum += w;
+  }
+  if (!wsum) return null;
+  return vsum / wsum;
 }
 
 function round1Average(g) {
@@ -992,6 +1016,176 @@ function assignmentGroup(round, applicantId) {
   return STATE.groups.find(function (g) { return g.id === gid; }) || null;
 }
 
+function activeReviewGroup(round, applicantId) {
+  if (STATE.filterGroup && STATE.filterGroup !== 'all') return STATE.filterGroup;
+  return ensureAssignment(round, applicantId);
+}
+
+function sortApplicantList(list, round) {
+  return list.slice().sort((a, b) => {
+    let av, bv;
+    if (STATE.sortKey === 'name') { av = a.name; bv = b.name; }
+    else if (STATE.sortKey === 'gpa') { av = autoFor(a).gpa.value ?? -1; bv = autoFor(b).gpa.value ?? -1; }
+    else if (STATE.sortKey === 'score') { av = scoreFor(round, a.id) ?? -1; bv = scoreFor(round, b.id) ?? -1; }
+    else if (STATE.sortKey === 'group') { av = ensureAssignment(round, a.id) || ''; bv = ensureAssignment(round, b.id) || ''; }
+    else { av = a.name; bv = b.name; }
+    if (av < bv) return STATE.sortDir === 'asc' ? -1 : 1;
+    if (av > bv) return STATE.sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+}
+
+function incompleteQueue(round, groupId) {
+  if (!groupId || groupId === 'all') return [];
+  return sortApplicantList(poolForRound(round).filter(function (a) {
+    return ensureAssignment(round, a.id) === groupId && !hasManualScore(STATE.grades[round][a.id]);
+  }), round);
+}
+
+function assignedInListOrder(round, groupId) {
+  return sortApplicantList(poolForRound(round).filter(function (a) {
+    return ensureAssignment(round, a.id) === groupId;
+  }), round);
+}
+
+function nextInQueue(round, groupId, currentId) {
+  const q = incompleteQueue(round, groupId);
+  const others = q.filter(function (a) { return a.id !== currentId; });
+  if (!others.length) return null;
+  const idx = q.findIndex(function (a) { return a.id === currentId; });
+  if (idx >= 0) return q[idx + 1] || others[0];
+  const ordered = assignedInListOrder(round, groupId);
+  const curIdx = ordered.findIndex(function (a) { return a.id === currentId; });
+  for (let i = 0; i < others.length; i++) {
+    if (ordered.findIndex(function (p) { return p.id === others[i].id; }) > curIdx) return others[i];
+  }
+  return others[0];
+}
+
+function prevIncompleteInPool(round, groupId, currentId) {
+  const q = incompleteQueue(round, groupId).filter(function (a) { return a.id !== currentId; });
+  if (!q.length) return null;
+  const ordered = assignedInListOrder(round, groupId);
+  const curIdx = ordered.findIndex(function (a) { return a.id === currentId; });
+  let last = null;
+  for (let i = 0; i < q.length; i++) {
+    if (ordered.findIndex(function (p) { return p.id === q[i].id; }) < curIdx) last = q[i];
+  }
+  return last || q[q.length - 1];
+}
+
+function queueCountText(round, groupId, applicantId) {
+  const grp = STATE.groups.find(function (g) { return g.id === groupId; });
+  const name = grp ? grp.name : 'group';
+  const q = incompleteQueue(round, groupId);
+  if (!q.length) return 'All ' + name + ' ' + ROUND_LABEL[round] + ' reviews filled';
+  const idx = q.findIndex(function (a) { return a.id === applicantId; });
+  if (idx >= 0) return (idx + 1) + ' of ' + q.length + ' left';
+  return q.length + ' remaining';
+}
+
+function reviewAsChipsHtml() {
+  return `<span class="review-as">
+    <span class="lbl">Review as</span>
+    ${STATE.groups.map(g => `<label class="chip ${STATE.filterGroup === g.id ? 'active' : ''}" data-reviewas="${g.id}">${esc(g.name)}</label>`).join('')}
+  </span>`;
+}
+
+function bindReviewAs(root, onChange) {
+  root.querySelectorAll('[data-reviewas]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.reviewas;
+      STATE.filterGroup = STATE.filterGroup === id ? 'all' : id;
+      STATE.queueTrail = [];
+      STATE.queueDone = false;
+      onChange();
+    });
+  });
+}
+
+function queueNavHtml(round, applicantId) {
+  const gid = activeReviewGroup(round, applicantId);
+  const next = gid ? nextInQueue(round, gid, applicantId) : null;
+  const canPrev = !!(STATE.queueTrail && STATE.queueTrail.length) || !!(gid && prevIncompleteInPool(round, gid, applicantId));
+  const q = gid ? incompleteQueue(round, gid) : [];
+  const currentLeft = q.some(function (a) { return a.id === applicantId; });
+  const nextDisabled = !next && currentLeft;
+  return `<div class="queue-nav" id="queueNav">
+    ${reviewAsChipsHtml()}
+    ${gid ? `<span class="queue-count" id="queueCount">${esc(queueCountText(round, gid, applicantId))}</span>
+    <button class="btn small" id="queuePrev" ${canPrev ? '' : 'disabled'}>← Prev</button>
+    <button class="btn small primary" id="queueNext" ${nextDisabled ? 'disabled' : ''}>Next →</button>` : ''}
+  </div>`;
+}
+
+function bindQueueNav(round, applicantId) {
+  bindReviewAs(contentEl, () => render());
+  const nextBtn = document.getElementById('queueNext');
+  const prevBtn = document.getElementById('queuePrev');
+  if (nextBtn) nextBtn.addEventListener('click', () => goQueueNext(round));
+  if (prevBtn) prevBtn.addEventListener('click', () => goQueuePrev(round));
+}
+
+function goQueueNext(round) {
+  const gid = activeReviewGroup(round, STATE.currentApplicantId);
+  const next = nextInQueue(round, gid, STATE.currentApplicantId);
+  if (!next) {
+    STATE.queueDone = true;
+    render();
+    return;
+  }
+  if (STATE.currentApplicantId && STATE.currentApplicantId !== next.id) {
+    STATE.queueTrail = STATE.queueTrail || [];
+    STATE.queueTrail.push(STATE.currentApplicantId);
+  }
+  STATE.currentApplicantId = next.id;
+  STATE.gradeRound = round;
+  STATE.view = 'grade';
+  STATE.queueDone = false;
+  render();
+}
+
+function goQueuePrev(round) {
+  if (STATE.queueTrail && STATE.queueTrail.length) {
+    const prevId = STATE.queueTrail.pop();
+    if (prevId && STATE.byId[prevId]) {
+      STATE.currentApplicantId = prevId;
+      STATE.gradeRound = round;
+      STATE.view = 'grade';
+      STATE.queueDone = false;
+      render();
+      return;
+    }
+  }
+  const gid = activeReviewGroup(round, STATE.currentApplicantId);
+  const prev = prevIncompleteInPool(round, gid, STATE.currentApplicantId);
+  if (prev) {
+    STATE.currentApplicantId = prev.id;
+    STATE.gradeRound = round;
+    STATE.view = 'grade';
+    STATE.queueDone = false;
+    render();
+  }
+}
+
+function refreshQueueBar(round) {
+  const countEl = document.getElementById('queueCount');
+  if (!countEl) return;
+  const gid = activeReviewGroup(round, STATE.currentApplicantId);
+  if (!gid) return;
+  countEl.textContent = queueCountText(round, gid, STATE.currentApplicantId);
+  const nextBtn = document.getElementById('queueNext');
+  const prevBtn = document.getElementById('queuePrev');
+  const next = nextInQueue(round, gid, STATE.currentApplicantId);
+  const q = incompleteQueue(round, gid);
+  const currentLeft = q.some(function (a) { return a.id === STATE.currentApplicantId; });
+  if (nextBtn) nextBtn.disabled = !next && currentLeft;
+  if (prevBtn) {
+    const canPrev = !!(STATE.queueTrail && STATE.queueTrail.length) || !!prevIncompleteInPool(round, gid, STATE.currentApplicantId);
+    prevBtn.disabled = !canPrev;
+  }
+}
+
 // ---------------- Rendering: shell ----------------
 const railEl = document.getElementById('rail');
 const contentEl = document.getElementById('content');
@@ -1023,6 +1217,7 @@ function renderRail() {
     ${railBtn('export', 'Export')}
     <div class="rail-foot">
       <div><span class="dot"></span>${B.applicants.length} applicants at build · ${STATE.applicants.length} now</div>
+      <div class="sub" style="margin-top:4px;">${BUILD_STAMP}</div>
     </div>
   `;
   railEl.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => {
@@ -1198,12 +1393,12 @@ function renderReviewerBias() {
   Object.entries(STATE.grades.screen).forEach(([aid, g]) => {
     if (!hasManualScore(g)) return;
     const grp = assignmentGroup('screen', aid);
-    const avg = screenAverage(g);
+    const avg = screenAverage(g, STATE.byId[aid]);
     if (avg === null || !grp || !tallies[grp.id]) return;
     tallies[grp.id].sum += avg;
     tallies[grp.id].n++;
   });
-  const overallVals = Object.values(STATE.grades.screen).filter(hasManualScore).map(g => screenAverage(g)).filter(v => v !== null);
+  const overallVals = Object.entries(STATE.grades.screen).filter(([, g]) => hasManualScore(g)).map(([aid, g]) => screenAverage(g, STATE.byId[aid])).filter(v => v !== null);
   const overall = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
   const rows = STATE.groups.map(g => {
     const t = tallies[g.id];
@@ -1232,22 +1427,15 @@ function renderRoundList(round) {
     list = list.filter(a => scoreFor('screen', a.id) !== null);
   }
   if (STATE.filterGroup !== 'all') list = list.filter(a => ensureAssignment(round, a.id) === STATE.filterGroup);
+  if (STATE.incompleteOnly && STATE.filterGroup !== 'all') {
+    list = list.filter(a => !hasManualScore(STATE.grades[round][a.id]));
+  }
   if (STATE.filterYear !== 'all') list = list.filter(a => a.classYear === STATE.filterYear);
   if (STATE.search) {
     const q = STATE.search.toLowerCase();
     list = list.filter(a => a.name.toLowerCase().includes(q) || (a.major || '').toLowerCase().includes(q) || a.email.toLowerCase().includes(q));
   }
-  list = list.slice().sort((a, b) => {
-    let av, bv;
-    if (STATE.sortKey === 'name') { av = a.name; bv = b.name; }
-    else if (STATE.sortKey === 'gpa') { av = autoFor(a).gpa.value ?? -1; bv = autoFor(b).gpa.value ?? -1; }
-    else if (STATE.sortKey === 'score') { av = scoreFor(round, a.id) ?? -1; bv = scoreFor(round, b.id) ?? -1; }
-    else if (STATE.sortKey === 'group') { av = ensureAssignment(round, a.id) || ''; bv = ensureAssignment(round, b.id) || ''; }
-    else { av = a.name; bv = b.name; }
-    if (av < bv) return STATE.sortDir === 'asc' ? -1 : 1;
-    if (av > bv) return STATE.sortDir === 'asc' ? 1 : -1;
-    return 0;
-  });
+  list = sortApplicantList(list, round);
 
   const yearOpts = ['Freshman', 'Sophomore', 'Junior', 'Senior'].filter(y => STATE.applicants.some(a => a.classYear === y));
 
@@ -1263,9 +1451,12 @@ function renderRoundList(round) {
         ${yearOpts.map(y => `<option value="${esc(y)}" ${STATE.filterYear === y ? 'selected' : ''}>${esc(y)}</option>`).join('')}
       </select>
       ${round === 'round1' ? `<label class="chip ${STATE.screenedOnly ? 'active' : ''}" id="advToggle">Screened only</label>` : ''}
+      <label class="chip ${STATE.incompleteOnly ? 'active' : ''}" id="incompleteToggle">Unreviewed only</label>
+      ${reviewAsChipsHtml()}
       <div class="topbar-spacer"></div>
-      <span class="sub" style="color:var(--slate); font-size:12px;">${list.length} shown</span>
+      <span class="sub" style="color:var(--slate); font-size:12px;">${STATE.incompleteOnly && STATE.filterGroup !== 'all' ? list.length + ' unreviewed' : list.length + ' shown'}</span>
     </div>
+    ${STATE.incompleteOnly && STATE.filterGroup === 'all' ? `<div class="queue-hint">Pick your review group to see only that pair’s unfinished assigned applications. Other groups stay visible until you do.</div>` : ''}
     <div class="table-wrap">
       <table class="grid">
         <thead><tr>
@@ -1283,21 +1474,30 @@ function renderRoundList(round) {
     </div>
   `;
   document.getElementById('searchBox').addEventListener('input', e => { STATE.search = e.target.value; renderRoundList(round); });
-  document.getElementById('groupFilter').addEventListener('change', e => { STATE.filterGroup = e.target.value; renderRoundList(round); });
+  document.getElementById('groupFilter').addEventListener('change', e => { STATE.filterGroup = e.target.value; STATE.queueTrail = []; renderRoundList(round); });
   document.getElementById('yearFilter').addEventListener('change', e => { STATE.filterYear = e.target.value; renderRoundList(round); });
   const advToggle = document.getElementById('advToggle');
   if (advToggle) advToggle.addEventListener('click', () => { STATE.screenedOnly = !STATE.screenedOnly; renderRoundList(round); });
+  const incompleteToggle = document.getElementById('incompleteToggle');
+  if (incompleteToggle) incompleteToggle.addEventListener('click', () => { STATE.incompleteOnly = !STATE.incompleteOnly; renderRoundList(round); });
+  bindReviewAs(contentEl, () => renderRoundList(round));
   contentEl.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const k = th.dataset.sort;
     if (STATE.sortKey === k) STATE.sortDir = STATE.sortDir === 'asc' ? 'desc' : 'asc'; else { STATE.sortKey = k; STATE.sortDir = 'asc'; }
     renderRoundList(round);
   }));
   contentEl.querySelectorAll('tr.clickable').forEach(tr => tr.addEventListener('click', () => {
+    STATE.queueTrail = [];
+    STATE.queueDone = false;
     STATE.currentApplicantId = tr.dataset.id; STATE.gradeRound = round; STATE.view = 'grade'; render();
   }));
 }
 
 function emptyRoundMessage(round) {
+  if (STATE.incompleteOnly && STATE.filterGroup !== 'all' && !STATE.search && STATE.filterYear === 'all') {
+    const grp = STATE.groups.find(g => g.id === STATE.filterGroup);
+    return 'All ' + (grp ? grp.name : 'group') + ' ' + ROUND_LABEL[round] + ' reviews filled';
+  }
   if (round === 'round2' && !poolForRound('round2').length) {
     const scored = STATE.applicants.filter(a => scoreFor('round1', a.id) !== null).length;
     return scored
@@ -1349,9 +1549,27 @@ function renderGrade() {
   if (!a.attendance) a.attendance = { coffeeChats: [], infoSession: null, meetMembers: null };
   if (!Array.isArray(a.attendance.coffeeChats)) a.attendance.coffeeChats = [];
   const g = getGrade(round, a.id);
+  const gid = activeReviewGroup(round, a.id);
+  const grp = gid ? STATE.groups.find(function (x) { return x.id === gid; }) : null;
+
+  if (STATE.queueDone) {
+    contentEl.innerHTML = `
+      <button class="btn ghost small" id="backBtn">← Back to ${esc(ROUND_LABEL[round])}</button>
+      <div class="empty-state">
+        <h3>All ${esc(grp ? grp.name : 'group')} ${esc(ROUND_LABEL[round])} reviews filled</h3>
+        <p>Every application assigned to this pair has a score for this round.</p>
+      </div>
+    `;
+    document.getElementById('backBtn').addEventListener('click', () => { STATE.queueDone = false; STATE.view = 'round:' + round; render(); });
+    return;
+  }
 
   contentEl.innerHTML = `
-    <button class="btn ghost small" id="backBtn">← Back to ${esc(ROUND_LABEL[round])}</button>
+    <div class="grade-nav-row">
+      <button class="btn ghost small" id="backBtn">← Back to ${esc(ROUND_LABEL[round])}</button>
+      <div class="topbar-spacer"></div>
+      ${queueNavHtml(round, a.id)}
+    </div>
     <div class="applicant-header" style="margin-top:10px;">
       <div>
         <h2>${esc(a.name)}${lateBadge(a)}</h2>
@@ -1377,10 +1595,11 @@ function renderGrade() {
       <div class="side-stack" id="gradeSide"></div>
     </div>
   `;
-  document.getElementById('backBtn').addEventListener('click', () => { STATE.view = 'round:' + round; render(); });
+  document.getElementById('backBtn').addEventListener('click', () => { STATE.queueDone = false; STATE.view = 'round:' + round; render(); });
   document.getElementById('groupPicker').addEventListener('change', e => {
     STATE.assignments[round][a.id] = e.target.value; saveAssignment(round, a.id, e.target.value);
   });
+  bindQueueNav(round, a.id);
 
   if (round === 'screen') renderScreenGrade(a, g);
   else if (round === 'round1') renderRound1Grade(a, g);
@@ -1444,7 +1663,7 @@ function renderScreenGrade(a, g) {
 
   const auto = autoFor(a);
 
-  main.innerHTML = dims.map(d => {
+  main.innerHTML = `<div class="weight-note">${esc(SCREEN_WEIGHT_NOTE)}</div>` + dims.map(d => {
     const autoVal = auto.scores[d.key];
     const autoable = typeof autoVal === 'number';
     const usingAuto = autoable && isAuto(a, g, d.key);
@@ -1521,7 +1740,8 @@ function renderScreenGrade(a, g) {
 
 function updateHeaderScore(round, g, a) {
   const big = document.querySelector('.avg-display .big');
-  if (big) big.textContent = fmtScore(round, g, a);
+  if (big) big.textContent = fmtScore(round, g, a || STATE.byId[STATE.currentApplicantId]);
+  refreshQueueBar(round);
 }
 
 function renderRound1Grade(a, g) {

@@ -74,13 +74,33 @@ def has_manual_score(g):
     return any(isinstance(scores.get(k), (int, float)) for k in scores)
 
 
+# GPA 10 · Essay 30 · Resume / Experience / Leadership 20 each.
+# Missing or N/A dimensions drop out; remaining weights are renormalized.
+SCREEN_WEIGHTS = {
+    'academics': 0.10,
+    'essay': 0.30,
+    'resume': 0.20,
+    'experience': 0.20,
+    'leadership': 0.20,
+}
+
+
 def screen_average(g, a, cache=None, dim_keys=None):
-    keys = dim_keys or ['academics', 'resume', 'experience', 'leadership', 'essay']
-    vals = [eff_score(a, g, k, cache) for k in keys]
-    vals = [v for v in vals if isinstance(v, (int, float))]
-    if not vals:
+    keys = dim_keys or list(SCREEN_WEIGHTS.keys())
+    wsum = 0.0
+    vsum = 0.0
+    for k in keys:
+        v = eff_score(a, g, k, cache)
+        if not isinstance(v, (int, float)):
+            continue
+        w = SCREEN_WEIGHTS.get(k)
+        if not w:
+            continue
+        vsum += v * w
+        wsum += w
+    if not wsum:
         return None
-    return sum(vals) / len(vals)
+    return vsum / wsum
 
 
 def round1_average(g):
