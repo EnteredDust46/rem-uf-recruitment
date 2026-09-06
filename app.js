@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'screen-avg5-20260906';
+const BUILD_STAMP = 'essays-visible-20260906';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -1879,20 +1879,27 @@ function renderRound2Grade(a, g) {
   bindNotesFields(main, 'round2', a.id);
 }
 
+function essayField(label, text, always) {
+  const val = text == null ? '' : String(text);
+  if (!val.trim() && !always) return '';
+  return `<div class="field-label">${esc(label)}</div><div class="essay-block">${esc(val)}</div>`;
+}
+
 function renderGradeSide(a, round, g) {
   const side = document.getElementById('gradeSide');
   side.innerHTML = `
     <div class="card card-pad">
       <div class="section-title" style="margin-bottom:8px;">Application</div>
-      <div class="field-label">Why Rem</div>
-      <div class="essay-block">${esc(a.whyRem)}</div>
+      ${essayField('Why Rem', a.whyRem, true)}
       <div class="field-label">Core value: ${esc(a.coreValue)}</div>
       <div class="essay-block">${esc(a.valueEssay)}</div>
-      <div class="field-label">Career interests</div>
-      <div style="font-size:13px;">${esc(a.careerInterests)}</div>
-      <div class="field-label">Skills</div>
-      <div style="font-size:13px;">${esc(a.skills)}</div>
-      ${a.other ? `<div class="field-label">Anything else</div><div class="essay-block">${esc(a.other)}</div>` : ''}
+      ${essayField('Career interests', a.careerInterests, true)}
+      ${essayField('How joining Rem helps your career goals', a.howRemHelps, true)}
+      ${essayField('Positions applying for', a.position)}
+      ${essayField('Skills', a.skills)}
+      ${essayField('Accommodations', a.accommodations)}
+      ${essayField('Anything else', a.other)}
+      ${essayField('Commitment acknowledgment', a.commitment)}
     </div>
     <div class="card card-pad">
       <div class="section-title" style="margin-bottom:6px;">Attendance</div>
