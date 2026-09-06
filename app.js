@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'flag-advance-20260906';
+const BUILD_STAMP = 'layout-know-20260906';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -382,6 +382,28 @@ function saveAssignment(round, applicantId, groupId) {
   autoAssignCache.poolKey = null;
   recordOp({ kind: 'assign', round: round, id: applicantId, value: groupId });
   queueSave();
+}
+
+function pickOtherReviewGroup(currentId) {
+  const others = STATE.groups.filter(function (g) { return g && g.id && g.id !== currentId; });
+  if (!others.length) return null;
+  return others[Math.floor(Math.random() * others.length)];
+}
+
+function reassignKnownPerson(round, applicantId) {
+  const current = ensureAssignment(round, applicantId);
+  const next = pickOtherReviewGroup(current);
+  if (!next) {
+    toast('No other review group available');
+    return;
+  }
+  if (!STATE.assignments[round]) STATE.assignments[round] = {};
+  STATE.assignments[round][applicantId] = next.id;
+  saveAssignment(round, applicantId, next.id);
+  flushSave(true);
+  toast('Reassigned to ' + next.name);
+  const picker = document.getElementById('groupPicker');
+  if (picker) picker.value = next.id;
 }
 
 function saveAdvance() {
@@ -1332,6 +1354,29 @@ function pageScrollEl() {
   return document.querySelector('.main');
 }
 
+const GRADE_LAYOUT_KEY = 'rem-uf-grade-layout';
+
+function getGradeLayout() {
+  try {
+    const v = localStorage.getItem(GRADE_LAYOUT_KEY);
+    if (v === 'side' || v === 'stacked') return v;
+  } catch (e) { /* private mode */ }
+  return 'stacked';
+}
+
+function setGradeLayout(layout) {
+  try { localStorage.setItem(GRADE_LAYOUT_KEY, layout === 'side' ? 'side' : 'stacked'); } catch (e) { /* ignore */ }
+}
+
+function layoutToggleHtml() {
+  const layout = getGradeLayout();
+  return `<div class="layout-toggle" role="group" aria-label="Grade layout">
+    <span class="layout-toggle-lbl">Layout</span>
+    <button type="button" class="chip ${layout === 'stacked' ? 'active' : ''}" data-layout="stacked">Stacked</button>
+    <button type="button" class="chip ${layout === 'side' ? 'active' : ''}" data-layout="side">Side</button>
+  </div>`;
+}
+
 function gradeViewKey() {
   return STATE.view === 'grade' ? (STATE.currentApplicantId + ':' + (STATE.gradeRound || '')) : null;
 }
@@ -1436,8 +1481,13 @@ function renderTopbar() {
 }
 
 function renderContent() {
-  if (STATE.view === 'grade') contentEl.classList.add('grade-wide');
-  else contentEl.classList.remove('grade-wide');
+  if (STATE.view === 'grade') {
+    contentEl.classList.add('grade-wide');
+    contentEl.classList.toggle('grade-layout-side', getGradeLayout() === 'side');
+    contentEl.classList.toggle('grade-layout-stacked', getGradeLayout() !== 'side');
+  } else {
+    contentEl.classList.remove('grade-wide', 'grade-layout-side', 'grade-layout-stacked');
+  }
   if (STATE.view === 'overview') return renderOverview();
   if (STATE.view === 'flagged') return renderFlaggedList();
   if (STATE.view.startsWith('round:')) return renderRoundList(STATE.view.split(':')[1]);
@@ -1907,10 +1957,26 @@ function renderGrade() {
   }
 
   const preservedEssays = takePreservedEl('gradeEssays', a.id);
+  const layout = getGradeLayout();
+  const essaysMount = `<div class="grade-essays" id="gradeEssaysMount"></div>`;
+  const body = layout === 'side'
+    ? `<div class="two-col grade-layout-side">
+        <div id="gradeMain"></div>
+        <div class="side-stack" id="gradeSideCol">
+          ${essaysMount}
+          <div id="gradeSide"></div>
+        </div>
+      </div>`
+    : `${essaysMount}
+      <div class="two-col grade-layout-stacked">
+        <div id="gradeMain"></div>
+        <div class="side-stack" id="gradeSide"></div>
+      </div>`;
 
   contentEl.innerHTML = `
     <div class="grade-nav-row">
       <button class="btn ghost small" id="backBtn">← Back to ${esc(ROUND_LABEL[round])}</button>
+      ${layoutToggleHtml()}
       <div class="topbar-spacer"></div>
       ${queueNavHtml(round, a.id)}
     </div>
@@ -1926,24 +1992,30 @@ function renderGrade() {
           ${extUrl(a.resume) ? `<span><a href="${esc(extUrl(a.resume))}" target="_blank" rel="noopener">Resume ↗</a></span>` : ''}
         </div>
       </div>
-      <div style="text-align:right;">
+      <div class="assign-block">
         <div class="avg-display"><span class="big">${fmtScore(round, g, a)}</span><span class="of">${round === 'round2' ? '/ 24' : round === 'round1' ? '/ 4 avg' : '/ 5 avg'}</span></div>
-        <div class="field-label" style="margin-top:8px; text-align:right;">Assigned review group</div>
+        <div class="field-label assign-label">Assigned review group</div>
         <select id="groupPicker" title="Who is reviewing this application">
           ${STATE.groups.map(gr => `<option value="${gr.id}" ${ensureAssignment(round, a.id) === gr.id ? 'selected' : ''}>${esc(gr.name)}</option>`).join('')}
         </select>
+        <button type="button" class="btn small know-person-btn" id="knowPersonBtn" title="Reassign this application to another review group"${readOnly ? ' disabled' : ''}>I know this person</button>
       </div>
     </div>
-    <div class="grade-essays" id="gradeEssaysMount"></div>
-    <div class="two-col">
-      <div id="gradeMain"></div>
-      <div class="side-stack" id="gradeSide"></div>
-    </div>
+    ${body}
   `;
   document.getElementById('backBtn').addEventListener('click', () => { STATE.queueDone = false; STATE.view = STATE.returnView || ('round:' + round); render(); });
   document.getElementById('groupPicker').addEventListener('change', e => {
     STATE.assignments[round][a.id] = e.target.value; saveAssignment(round, a.id, e.target.value);
   });
+  contentEl.querySelectorAll('[data-layout]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (btn.dataset.layout === getGradeLayout()) return;
+      setGradeLayout(btn.dataset.layout);
+      render();
+    });
+  });
+  const knowBtn = document.getElementById('knowPersonBtn');
+  if (knowBtn) knowBtn.addEventListener('click', function () { reassignKnownPerson(round, a.id); });
   bindQueueNav(round, a.id);
 
   if (round === 'screen') renderScreenGrade(a, g);
