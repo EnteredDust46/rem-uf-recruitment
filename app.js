@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'essay-scroll-wide-20260906';
+const BUILD_STAMP = 'flag-advance-20260906';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -17,6 +17,7 @@ const STATE = {
   vouches: {},                                        // applicantId -> { by: [reviewerId], note }
   assignments: { screen: {}, round1: {}, round2: {} }, // applicantId -> groupId (manual overrides)
   groups: B.defaultGroups.map(g => ({ ...g })),
+  advance: { round1: {}, topN: null, applied: false },
   currentApplicantId: null,
   search: '',
   sortKey: 'name',
@@ -24,6 +25,8 @@ const STATE = {
   screenedOnly: false,
   filterGroup: 'all',
   incompleteOnly: false,
+  flaggedOnly: false,
+  returnView: null,
   queueTrail: [],
   queueDone: false,
   filterYear: 'all',
@@ -141,6 +144,7 @@ function adoptState(data) {
     STATE.assignments = Object.assign({ screen: {}, round1: {}, round2: {} }, data.assignments);
   }
   if (Array.isArray(data.groups) && data.groups.length) STATE.groups = data.groups;
+  if (data.advance && typeof data.advance === 'object') STATE.advance = normalizeAdvance(data.advance);
   liveVersion = data.updatedAt || null;
 }
 
@@ -154,6 +158,11 @@ function currentStateDoc() {
     vouches: cleanVouches(STATE.vouches),
     assignments: STATE.assignments,
     groups: STATE.groups,
+    advance: {
+      round1: Object.assign({}, (STATE.advance && STATE.advance.round1) || {}),
+      topN: (STATE.advance && STATE.advance.topN) || null,
+      applied: !!(STATE.advance && STATE.advance.applied),
+    },
     updatedAt: Date.now(),
   };
 }
@@ -234,6 +243,8 @@ function applyPendingOps() {
         STATE.assignments[op.round][op.id] = op.value;
       } else if (op.kind === 'groups') {
         STATE.groups = op.value;
+      } else if (op.kind === 'advance') {
+        STATE.advance = normalizeAdvance(op.value);
       }
     } catch (e) { /* skip a malformed op rather than blocking the load */ }
   });
@@ -370,6 +381,18 @@ function saveGroupsAndAssignments() {
 function saveAssignment(round, applicantId, groupId) {
   autoAssignCache.poolKey = null;
   recordOp({ kind: 'assign', round: round, id: applicantId, value: groupId });
+  queueSave();
+}
+
+function saveAdvance() {
+  recordOp({
+    kind: 'advance',
+    value: {
+      round1: Object.assign({}, (STATE.advance && STATE.advance.round1) || {}),
+      topN: (STATE.advance && STATE.advance.topN) || null,
+      applied: !!(STATE.advance && STATE.advance.applied),
+    },
+  });
   queueSave();
 }
 
@@ -989,9 +1012,118 @@ function persistAllAssignments() {
   queueSave();
 }
 
+function emptyAdvance() {
+  return { round1: {}, topN: null, applied: false };
+}
+
+function normalizeAdvance(raw) {
+  const out = emptyAdvance();
+  if (!raw || typeof raw !== 'object') return out;
+  if (raw.round1 && typeof raw.round1 === 'object' && !Array.isArray(raw.round1)) {
+    Object.keys(raw.round1).forEach(function (id) { out.round1[id] = !!raw.round1[id]; });
+  } else if (Array.isArray(raw.round1)) {
+    raw.round1.forEach(function (id) { if (id) out.round1[id] = true; });
+  } else if (Array.isArray(raw.ids)) {
+    raw.ids.forEach(function (id) { if (id) out.round1[id] = true; });
+  }
+  if (typeof raw.topN === 'number' && isFinite(raw.topN) && raw.topN > 0) out.topN = Math.floor(raw.topN);
+  if (raw.applied === true) out.applied = true;
+  else if (raw.applied === false) out.applied = false;
+  else out.applied = Object.keys(out.round1).length > 0;
+  return out;
+}
+
+function hasExplicitAdvance() {
+  return !!(STATE.advance && STATE.advance.applied);
+}
+
 function poolForRound(round) {
   if (round === 'round2') return STATE.applicants.filter(a => passedRound1(a.id));
+  if (round === 'round1' && hasExplicitAdvance()) {
+    return STATE.applicants.filter(a => STATE.advance.round1[a.id] === true);
+  }
   return STATE.applicants;
+}
+
+function scoredScreenApplicants() {
+  return STATE.applicants.filter(function (a) {
+    return hasManualScore(STATE.grades.screen[a.id]);
+  }).slice().sort(function (a, b) {
+    const as = scoreFor('screen', a.id);
+    const bs = scoreFor('screen', b.id);
+    const av = as == null ? -1 : as;
+    const bv = bs == null ? -1 : bs;
+    if (bv !== av) return bv - av;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+}
+
+function isAdvanceChecked(id) {
+  if (hasExplicitAdvance()) return STATE.advance.round1[id] === true;
+  return true;
+}
+
+function ensureAdvanceSnapshot() {
+  if (hasExplicitAdvance()) return;
+  const map = {};
+  poolForRound('round1').forEach(function (a) { map[a.id] = true; });
+  STATE.advance.round1 = map;
+  STATE.advance.applied = true;
+}
+
+function applyAdvanceTopN(n) {
+  const ranked = scoredScreenApplicants();
+  const count = Math.max(0, Math.floor(Number(n) || 0));
+  const map = {};
+  ranked.forEach(function (a, i) { map[a.id] = i < count; });
+  STATE.advance.round1 = map;
+  STATE.advance.topN = count || null;
+  STATE.advance.applied = true;
+  saveAdvance();
+}
+
+function clearAdvanceSet() {
+  STATE.advance = emptyAdvance();
+  saveAdvance();
+}
+
+function setAdvanceChecked(id, checked) {
+  ensureAdvanceSnapshot();
+  STATE.advance.round1[id] = !!checked;
+  saveAdvance();
+}
+
+function gradeFlagged(round, id) {
+  const g = STATE.grades[round] && STATE.grades[round][id];
+  return !!(g && g.flagSecond);
+}
+
+function isFlagged(id) {
+  return gradeFlagged('screen', id) || gradeFlagged('round1', id) || gradeFlagged('round2', id);
+}
+
+function flaggedApplicants() {
+  return STATE.applicants.filter(function (a) { return isFlagged(a.id); });
+}
+
+function flagRoundFor(id) {
+  if (gradeFlagged('screen', id)) return 'screen';
+  if (gradeFlagged('round1', id)) return 'round1';
+  if (gradeFlagged('round2', id)) return 'round2';
+  return 'screen';
+}
+
+function flagBadge(a) {
+  if (!a || !isFlagged(a.id)) return '';
+  return '<span class="flag-badge" title="Flagged for second reviewer">Flagged</span>';
+}
+
+function openFlaggedList() {
+  STATE.view = 'flagged';
+  STATE.currentApplicantId = null;
+  STATE.flaggedOnly = true;
+  STATE.returnView = 'flagged';
+  render();
 }
 
 // Round 2 is only for people who actually cleared the First Round threshold. Before
@@ -1261,6 +1393,7 @@ function renderRail() {
     ${railBtn('round:screen', ROUND_LABEL.screen, STATE.applicants.length)}
     ${railBtn('round:round1', ROUND_LABEL.round1, poolForRound('round1').length)}
     ${railBtn('round:round2', ROUND_LABEL.round2, poolForRound('round2').length)}
+    ${railBtn('flagged', 'Flagged', flaggedApplicants().length)}
     <div class="rail-group">Ops</div>
     ${railBtn('groups', 'Review Groups')}
     ${railBtn('export', 'Export')}
@@ -1270,7 +1403,13 @@ function renderRail() {
     </div>
   `;
   railEl.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => {
-    STATE.view = b.dataset.nav; STATE.currentApplicantId = null; render();
+    STATE.view = b.dataset.nav;
+    STATE.currentApplicantId = null;
+    STATE.returnView = null;
+    if (b.dataset.nav === 'flagged') STATE.flaggedOnly = true;
+    else if (b.dataset.nav === 'round:screen') { /* keep flaggedOnly chip state */ }
+    else STATE.flaggedOnly = false;
+    render();
   }));
   const stamp = document.getElementById('buildStamp');
   if (stamp) stamp.addEventListener('click', function () { render(); });
@@ -1281,7 +1420,8 @@ function renderTopbar() {
   if (STATE.view.startsWith('round:')) {
     const round = STATE.view.split(':')[1];
     title = ROUND_LABEL[round]; eyebrow = ROUND_SUB[round];
-  } else if (STATE.view === 'groups') { title = 'Review Groups'; eyebrow = 'Assigned groups · filled reviews'; }
+  } else if (STATE.view === 'flagged') { title = 'Flagged for second review'; eyebrow = 'Needs another look'; }
+  else if (STATE.view === 'groups') { title = 'Review Groups'; eyebrow = 'Assigned groups · filled reviews'; }
   else if (STATE.view === 'export') { title = 'Export'; eyebrow = 'Saving, and getting scores into the mastersheet'; }
   else if (STATE.view === 'grade') {
     const a = STATE.byId[STATE.currentApplicantId];
@@ -1299,6 +1439,7 @@ function renderContent() {
   if (STATE.view === 'grade') contentEl.classList.add('grade-wide');
   else contentEl.classList.remove('grade-wide');
   if (STATE.view === 'overview') return renderOverview();
+  if (STATE.view === 'flagged') return renderFlaggedList();
   if (STATE.view.startsWith('round:')) return renderRoundList(STATE.view.split(':')[1]);
   if (STATE.view === 'groups') return renderGroups();
   if (STATE.view === 'export') return renderExport();
@@ -1327,6 +1468,7 @@ function renderOverview() {
   const infoCount = STATE.applicants.filter(a => a.attendance && a.attendance.infoSession).length;
   const meetCount = STATE.applicants.filter(a => a.attendance && a.attendance.meetMembers).length;
   const vouchedCount = STATE.applicants.filter(a => vouchCount(a.id)).length;
+  const flaggedCount = flaggedApplicants().length;
   const years = {};
   STATE.applicants.forEach(a => { years[a.classYear || 'Unknown'] = (years[a.classYear || 'Unknown'] || 0) + 1; });
   const yearOrder = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Unknown'];
@@ -1336,18 +1478,22 @@ function renderOverview() {
 
   const screenDist = distribution(STATE.applicants.map(a => scoreFor('screen', a.id)).filter(v => v !== null), 1, 5);
   const r1Dist = distribution(r1Pool.map(a => scoreFor('round1', a.id)).filter(v => v !== null), 1, 4);
+  const advanceHtml = renderAdvanceCard();
 
   contentEl.innerHTML = `
     <div class="grid-stats" style="margin-bottom:22px;">
       ${statTile('Total applicants', total, `${STATE.applicants.length - B.applicants.length > 0 ? '+' + (STATE.applicants.length - B.applicants.length) + ' since build' : 'UF chapter'}`)}
-      ${statTile('Application Screen', `${screenScored}/${total}`, 'scored')}
-      ${statTile('First Round', `${r1Scored}/${r1Pool.length}`, `scored · ≥${B.rubrics.round1.advanceThreshold} avg advances`)}
-      ${statTile('Second Round pool', r2Pool.length, r2Pool.length ? `${r2Scored} scored` : 'advances from First Round')}
+      ${statTile('Application Screen', `${screenScored}/${total}`, 'scored', 'round:screen')}
+      ${statTile('First Round', `${r1Scored}/${r1Pool.length}`, hasExplicitAdvance() ? 'scored · explicit advance set' : `scored · everyone until you Apply top N`, 'round:round1')}
+      ${statTile('Second Round pool', r2Pool.length, r2Pool.length ? `${r2Scored} scored` : 'advances from First Round', 'round:round2')}
+      ${statTile('Flagged for 2nd review', flaggedCount, flaggedCount ? 'open the flagged list' : 'none flagged yet', 'flagged')}
       ${statTile('Coffee chat contact', coffeeCount, `of ${total} applicants`)}
       ${statTile('Meet the Members', meetCount, `of ${total} applicants`)}
       ${statTile('Late applications', STATE.applicants.filter(a => a.late).length, 'after Sep 4 11:59 PM ET')}
       ${statTile('Vouched for', vouchedCount, vouchedCount ? 'by an exec member' : 'no vouches yet')}
     </div>
+
+    ${advanceHtml}
 
     <div class="two-col">
       <div>
@@ -1398,7 +1544,81 @@ function renderOverview() {
       </div>
     </div>
   `;
-  contentEl.querySelector('[data-nav="groups"]').addEventListener('click', () => { STATE.view = 'groups'; render(); });
+  contentEl.querySelectorAll('[data-nav]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const dest = el.dataset.nav;
+      if (dest === 'flagged') { openFlaggedList(); return; }
+      STATE.view = dest;
+      STATE.currentApplicantId = null;
+      STATE.returnView = null;
+      if (dest === 'round:screen') { /* keep chip */ }
+      else STATE.flaggedOnly = false;
+      render();
+    });
+  });
+  bindAdvanceCard();
+}
+
+function renderAdvanceCard() {
+  const ranked = scoredScreenApplicants();
+  const selected = ranked.filter(function (a) { return isAdvanceChecked(a.id); }).length;
+  const topN = (STATE.advance && STATE.advance.topN) || Math.min(20, ranked.length) || 20;
+  const poolN = poolForRound('round1').length;
+  const applied = hasExplicitAdvance();
+  const rows = ranked.map(function (a) {
+    const s = scoreFor('screen', a.id);
+    const on = isAdvanceChecked(a.id);
+    return `<label class="advance-row">
+      <input type="checkbox" data-advance="${esc(a.id)}" ${on ? 'checked' : ''}>
+      <span class="nm">${esc(a.name)}</span>
+      <span class="sub">${esc(a.classYear || '')}</span>
+      <span class="mono">${s == null ? '—' : s.toFixed(1)}</span>
+    </label>`;
+  }).join('') || '<div class="sub" style="color:var(--slate); padding:8px 0;">No hand-scored Application Screens yet — only people with a real screen score compete for top N.</div>';
+  return `<div class="card card-pad advance-card" style="margin-bottom:22px;">
+    <div class="section-title">Who advances to First Round <span class="n">from Application Screen</span></div>
+    <p class="advance-copy">Apply top N to set the First Round pool. Until then, First Round still includes everyone. Apply top N resets the checks to the N highest Application Screen scores (weighted /5), then you can check or uncheck people. Changing N and applying again resets to the new top N. Saved for everyone — scores do not auto-advance anyone.</p>
+    <div class="advance-controls">
+      <label class="advance-n-label" for="advanceTopN">Advance top N</label>
+      <input type="number" id="advanceTopN" min="0" step="1" value="${topN}">
+      <button type="button" class="btn primary small" id="applyTopN">Apply top N</button>
+      ${applied ? '<button type="button" class="btn ghost small" id="clearAdvance">Use everyone again</button>' : ''}
+      <span class="advance-count">${selected} selected · N = ${topN}${applied ? ' · ' + poolN + ' in First Round' : ''}</span>
+    </div>
+    <div class="advance-status">${applied ? 'First Round is the checked list below.' : 'First Round still includes everyone — Apply top N to set the pool.'}</div>
+    <div class="advance-list">${rows}</div>
+  </div>`;
+}
+
+function bindAdvanceCard() {
+  const nInput = document.getElementById('advanceTopN');
+  const applyBtn = document.getElementById('applyTopN');
+  if (applyBtn) applyBtn.addEventListener('click', function () {
+    const n = nInput ? Number(nInput.value) : 0;
+    applyAdvanceTopN(n);
+    renderOverviewPreserveScroll();
+    toast('First Round set to top ' + Math.max(0, Math.floor(Number(n) || 0)) + ' by Application Screen score');
+  });
+  const clearBtn = document.getElementById('clearAdvance');
+  if (clearBtn) clearBtn.addEventListener('click', function () {
+    clearAdvanceSet();
+    renderOverviewPreserveScroll();
+    toast('First Round includes everyone again');
+  });
+  contentEl.querySelectorAll('[data-advance]').forEach(function (box) {
+    box.addEventListener('change', function (e) {
+      e.stopPropagation();
+      setAdvanceChecked(box.dataset.advance, box.checked);
+      renderOverviewPreserveScroll();
+    });
+  });
+}
+
+function renderOverviewPreserveScroll() {
+  const main = pageScrollEl();
+  const top = main ? main.scrollTop : 0;
+  render();
+  if (main) main.scrollTop = top;
 }
 
 function funnelRow(label, n, max) {
@@ -1407,8 +1627,9 @@ function funnelRow(label, n, max) {
     <div class="val">${n}</div></div>`;
 }
 
-function statTile(label, value, sub) {
-  return `<div class="card stat-tile"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+function statTile(label, value, sub, nav) {
+  const click = nav ? ` clickable" data-nav="${esc(nav)}" role="button" tabindex="0` : '';
+  return `<div class="card stat-tile${click}"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
 }
 function emptyNote(msg) { return `<div class="sub" style="color:var(--slate); padding:6px 0;">${msg}</div>`; }
 function truncate(s, n) { return s && s.length > n ? s.slice(0, n - 1) + '…' : s; }
@@ -1483,6 +1704,7 @@ function renderRoundList(round) {
   if (STATE.incompleteOnly && STATE.filterGroup !== 'all') {
     list = list.filter(a => !hasManualScore(STATE.grades[round][a.id]));
   }
+  if (STATE.flaggedOnly) list = list.filter(a => isFlagged(a.id));
   if (STATE.filterYear !== 'all') list = list.filter(a => a.classYear === STATE.filterYear);
   if (STATE.search) {
     const q = STATE.search.toLowerCase();
@@ -1504,6 +1726,7 @@ function renderRoundList(round) {
         ${yearOpts.map(y => `<option value="${esc(y)}" ${STATE.filterYear === y ? 'selected' : ''}>${esc(y)}</option>`).join('')}
       </select>
       ${round === 'round1' ? `<label class="chip ${STATE.screenedOnly ? 'active' : ''}" id="advToggle">Screened only</label>` : ''}
+      <label class="chip ${STATE.flaggedOnly ? 'active' : ''}" id="flaggedToggle">Flagged</label>
       <label class="chip ${STATE.incompleteOnly ? 'active' : ''}" id="incompleteToggle">Unreviewed only</label>
       ${reviewAsChipsHtml()}
       <div class="topbar-spacer"></div>
@@ -1531,6 +1754,8 @@ function renderRoundList(round) {
   document.getElementById('yearFilter').addEventListener('change', e => { STATE.filterYear = e.target.value; renderRoundList(round); });
   const advToggle = document.getElementById('advToggle');
   if (advToggle) advToggle.addEventListener('click', () => { STATE.screenedOnly = !STATE.screenedOnly; renderRoundList(round); });
+  const flaggedToggle = document.getElementById('flaggedToggle');
+  if (flaggedToggle) flaggedToggle.addEventListener('click', () => { STATE.flaggedOnly = !STATE.flaggedOnly; renderRoundList(round); });
   const incompleteToggle = document.getElementById('incompleteToggle');
   if (incompleteToggle) incompleteToggle.addEventListener('click', () => { STATE.incompleteOnly = !STATE.incompleteOnly; renderRoundList(round); });
   bindReviewAs(contentEl, () => renderRoundList(round));
@@ -1542,11 +1767,75 @@ function renderRoundList(round) {
   contentEl.querySelectorAll('tr.clickable').forEach(tr => tr.addEventListener('click', () => {
     STATE.queueTrail = [];
     STATE.queueDone = false;
+    STATE.returnView = 'round:' + round;
     STATE.currentApplicantId = tr.dataset.id; STATE.gradeRound = round; STATE.view = 'grade'; render();
   }));
 }
 
+function renderFlaggedList() {
+  let list = flaggedApplicants();
+  if (STATE.filterYear !== 'all') list = list.filter(a => a.classYear === STATE.filterYear);
+  if (STATE.search) {
+    const q = STATE.search.toLowerCase();
+    list = list.filter(a => a.name.toLowerCase().includes(q) || (a.major || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q));
+  }
+  list = sortApplicantList(list, 'screen');
+  const yearOpts = ['Freshman', 'Sophomore', 'Junior', 'Senior'].filter(y => STATE.applicants.some(a => a.classYear === y));
+  contentEl.innerHTML = `
+    <div class="filters-bar">
+      <input type="search" id="searchBox" placeholder="Search name, major, email…" value="${esc(STATE.search)}">
+      <select id="yearFilter">
+        <option value="all">All class years</option>
+        ${yearOpts.map(y => `<option value="${esc(y)}" ${STATE.filterYear === y ? 'selected' : ''}>${esc(y)}</option>`).join('')}
+      </select>
+      <div class="topbar-spacer"></div>
+      <span class="sub" style="color:var(--slate); font-size:12px;">${list.length} flagged</span>
+    </div>
+    <div class="table-wrap">
+      <table class="grid">
+        <thead><tr>
+          <th data-sort="name" class="${STATE.sortKey === 'name' ? 'sorted' : ''}">Applicant</th>
+          <th data-sort="gpa" class="${STATE.sortKey === 'gpa' ? 'sorted' : ''}">GPA</th>
+          <th>Flagged on</th>
+          <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}">Score</th>
+        </tr></thead>
+        <tbody>
+          ${list.map(a => {
+            const round = flagRoundFor(a.id);
+            const score = scoreFor(round, a.id);
+            return `<tr class="clickable" role="button" tabindex="0" data-id="${a.id}" data-round="${round}">
+              <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${flagBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
+              <td>${gpaCell(a)}</td>
+              <td>${esc(ROUND_LABEL[round] || round)}</td>
+              <td><span class="score-pill">${score === null ? '—' : (round === 'round2' ? score : round === 'screen' ? score.toFixed(1) + ' / 5' : score.toFixed(1))}</span></td>
+            </tr>`;
+          }).join('') || `<tr><td colspan="4"><div class="empty-state">No one is flagged for a second reviewer.</div></td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById('searchBox').addEventListener('input', e => { STATE.search = e.target.value; renderFlaggedList(); });
+  document.getElementById('yearFilter').addEventListener('change', e => { STATE.filterYear = e.target.value; renderFlaggedList(); });
+  contentEl.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.sort;
+    if (STATE.sortKey === k) STATE.sortDir = STATE.sortDir === 'asc' ? 'desc' : 'asc'; else { STATE.sortKey = k; STATE.sortDir = 'asc'; }
+    renderFlaggedList();
+  }));
+  contentEl.querySelectorAll('tr.clickable').forEach(tr => tr.addEventListener('click', () => {
+    STATE.queueTrail = [];
+    STATE.queueDone = false;
+    STATE.returnView = 'flagged';
+    STATE.currentApplicantId = tr.dataset.id;
+    STATE.gradeRound = tr.dataset.round || flagRoundFor(tr.dataset.id);
+    STATE.view = 'grade';
+    render();
+  }));
+}
+
 function emptyRoundMessage(round) {
+  if (STATE.flaggedOnly && !STATE.search && STATE.filterYear === 'all') {
+    return 'No one is flagged for a second reviewer.';
+  }
   if (STATE.incompleteOnly && STATE.filterGroup !== 'all' && !STATE.search && STATE.filterYear === 'all') {
     const grp = STATE.groups.find(g => g.id === STATE.filterGroup);
     return 'All ' + (grp ? grp.name : 'group') + ' ' + ROUND_LABEL[round] + ' reviews filled';
@@ -1566,7 +1855,7 @@ function renderRow(round, a) {
   const maxScale = round === 'round2' ? 24 : round === 'screen' ? 5 : 4;
   const scoreClass = score === null ? 'none' : (round === 'round1' && score < 3) ? 'bad' : (round !== 'round1' && score >= maxScale * 0.75) ? 'good' : '';
   return `<tr class="clickable" role="button" tabindex="0" data-id="${a.id}">
-    <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
+    <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${flagBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
     <td>${gpaCell(a)}</td>
     <td>${esc(truncate(a.position, 28))}</td>
     <td>${attendanceIcons(a)}</td>
@@ -1613,7 +1902,7 @@ function renderGrade() {
         <p>Every application assigned to this pair has a score for this round.</p>
       </div>
     `;
-    document.getElementById('backBtn').addEventListener('click', () => { STATE.queueDone = false; STATE.view = 'round:' + round; render(); });
+    document.getElementById('backBtn').addEventListener('click', () => { STATE.queueDone = false; STATE.view = STATE.returnView || ('round:' + round); render(); });
     return;
   }
 
@@ -1651,7 +1940,7 @@ function renderGrade() {
       <div class="side-stack" id="gradeSide"></div>
     </div>
   `;
-  document.getElementById('backBtn').addEventListener('click', () => { STATE.queueDone = false; STATE.view = 'round:' + round; render(); });
+  document.getElementById('backBtn').addEventListener('click', () => { STATE.queueDone = false; STATE.view = STATE.returnView || ('round:' + round); render(); });
   document.getElementById('groupPicker').addEventListener('change', e => {
     STATE.assignments[round][a.id] = e.target.value; saveAssignment(round, a.id, e.target.value);
   });
