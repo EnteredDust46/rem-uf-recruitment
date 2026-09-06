@@ -75,6 +75,7 @@ def has_manual_score(g):
 
 
 # GPA 10 · Essay 30 · Resume / Experience / Leadership 20 each.
+# Four-point dims convert to /5 by ×1.25; essay is already /5.
 # Missing or N/A dimensions drop out; remaining weights are renormalized.
 SCREEN_WEIGHTS = {
     'academics': 0.10,
@@ -83,6 +84,10 @@ SCREEN_WEIGHTS = {
     'experience': 0.20,
     'leadership': 0.20,
 }
+
+
+def screen_scaled(key, v):
+    return v if key == 'essay' else v * 1.25
 
 
 def screen_average(g, a, cache=None, dim_keys=None):
@@ -96,7 +101,7 @@ def screen_average(g, a, cache=None, dim_keys=None):
         w = SCREEN_WEIGHTS.get(k)
         if not w:
             continue
-        vsum += v * w
+        vsum += screen_scaled(k, v) * w
         wsum += w
     if not wsum:
         return None

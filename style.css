@@ -217,7 +217,7 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 .name-cell .sub { font-size: 11.5px; color: var(--slate); }
 .score-pill {
   display: inline-flex; align-items: center; justify-content: center; min-width: 30px;
-  font-family: var(--font-mono); font-weight: 700; font-size: 12.5px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 12.5px; white-space: nowrap;
   padding: 2px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink);
 }
 .score-pill.none { background: var(--line); color: var(--slate); }

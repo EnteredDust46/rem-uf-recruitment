@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'group-queue-wts-20260905';
+const BUILD_STAMP = 'screen-avg5-20260906';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -823,11 +823,16 @@ function getGrade(round, applicantId) {
   return g;
 }
 
-// Application Screen average: GPA 10 · Essay 30 · Resume / Experience / Leadership 20 each.
-// Missing or N/A dimensions drop out and the rest is renormalized so a freshman
-// isn't punished for an unscored high-school GPA.
+// Application Screen average out of 5: GPA 10 · Essay 30 · Resume / Experience / Leadership 20 each.
+// Rubric clicks stay 0–4 / 1–4 (essay 1–5). Four-point dims convert to /5 by ×1.25
+// before weights; essay is already /5. Missing or N/A dims drop out and the rest
+// is renormalized so a freshman isn't punished for an unscored high-school GPA.
 const SCREEN_WEIGHTS = { academics: 0.10, essay: 0.30, resume: 0.20, experience: 0.20, leadership: 0.20 };
-const SCREEN_WEIGHT_NOTE = 'Screen average: GPA 10% · Essay 30% · Resume / Experience / Leadership 20% each';
+const SCREEN_WEIGHT_NOTE = 'Screen average: GPA 10% · Essay 30% · Resume / Experience / Leadership 20% each. 4-point dims scale ×1.25 to /5; essay already /5.';
+
+function screenScaled(key, v) {
+  return key === 'essay' ? v : v * 1.25;
+}
 
 function screenAverage(g, a) {
   if (!a && g && STATE.grades && STATE.grades.screen) {
@@ -844,7 +849,7 @@ function screenAverage(g, a) {
     if (typeof v !== 'number') continue;
     const w = SCREEN_WEIGHTS[k];
     if (!w) continue;
-    vsum += v * w;
+    vsum += screenScaled(k, v) * w;
     wsum += w;
   }
   if (!wsum) return null;
@@ -1299,7 +1304,7 @@ function renderOverview() {
     <div class="two-col">
       <div>
         <div class="card card-pad" style="margin-bottom:16px;">
-          <div class="section-title">Application Screen score distribution <span class="n">(avg of 5 dimensions)</span></div>
+          <div class="section-title">Application Screen score distribution <span class="n">(weighted / 5)</span></div>
           ${renderDistBars(screenDist)}
         </div>
         <div class="card card-pad" style="margin-bottom:16px;">
@@ -1518,7 +1523,7 @@ function renderRow(round, a) {
     <td>${esc(truncate(a.position, 28))}</td>
     <td>${attendanceIcons(a)}</td>
     <td>${grp ? esc(grp.name) : '—'}</td>
-    <td><span class="score-pill ${scoreClass}">${score === null ? '—' : (round === 'round2' ? score : score.toFixed(1))}</span></td>
+    <td><span class="score-pill ${scoreClass}">${score === null ? '—' : (round === 'round2' ? score : round === 'screen' ? score.toFixed(1) + ' / 5' : score.toFixed(1))}</span></td>
   </tr>`;
 }
 
