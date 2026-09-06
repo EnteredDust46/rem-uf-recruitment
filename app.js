@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'essays-visible-20260906';
+const BUILD_STAMP = 'essay-scroll-wide-20260906';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -1196,10 +1196,54 @@ const railEl = document.getElementById('rail');
 const contentEl = document.getElementById('content');
 const topbarEl = document.getElementById('topbar');
 
+function pageScrollEl() {
+  return document.querySelector('.main');
+}
+
+function gradeViewKey() {
+  return STATE.view === 'grade' ? (STATE.currentApplicantId + ':' + (STATE.gradeRound || '')) : null;
+}
+
+function captureGradeScroll() {
+  const key = gradeViewKey();
+  if (!key) return null;
+  const main = pageScrollEl();
+  const essays = {};
+  document.querySelectorAll('.essay-block').forEach(function (el) {
+    const id = el.getAttribute('data-essay') || ('idx-' + Object.keys(essays).length);
+    essays[id] = el.scrollTop;
+  });
+  return {
+    key: key,
+    mainTop: main ? main.scrollTop : 0,
+    contentTop: contentEl ? contentEl.scrollTop : 0,
+    essays: essays,
+  };
+}
+
+function restoreGradeScroll(snap) {
+  if (!snap || snap.key !== gradeViewKey()) return;
+  const main = pageScrollEl();
+  if (main) main.scrollTop = snap.mainTop;
+  if (contentEl) contentEl.scrollTop = snap.contentTop;
+  document.querySelectorAll('.essay-block').forEach(function (el) {
+    const id = el.getAttribute('data-essay');
+    if (id && Object.prototype.hasOwnProperty.call(snap.essays, id)) {
+      el.scrollTop = snap.essays[id];
+    }
+  });
+}
+
+let lastGradeKey = null;
+
 function render() {
+  const sameGrade = !!(gradeViewKey() && gradeViewKey() === lastGradeKey);
+  const snap = sameGrade ? captureGradeScroll() : null;
   renderRail();
   renderTopbar();
   renderContent();
+  lastGradeKey = gradeViewKey();
+  if (snap) restoreGradeScroll(snap);
 }
 
 function railBtn(id, label, count) {
@@ -1222,12 +1266,14 @@ function renderRail() {
     ${railBtn('export', 'Export')}
     <div class="rail-foot">
       <div><span class="dot"></span>${B.applicants.length} applicants at build · ${STATE.applicants.length} now</div>
-      <div class="sub" style="margin-top:4px;">${BUILD_STAMP}</div>
+      <button type="button" class="sub" style="margin-top:4px; cursor:pointer; background:none; border:none; color:inherit; font:inherit; padding:0; text-align:left;" id="buildStamp" title="Re-render">${BUILD_STAMP}</button>
     </div>
   `;
   railEl.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => {
     STATE.view = b.dataset.nav; STATE.currentApplicantId = null; render();
   }));
+  const stamp = document.getElementById('buildStamp');
+  if (stamp) stamp.addEventListener('click', function () { render(); });
 }
 
 function renderTopbar() {
@@ -1250,6 +1296,8 @@ function renderTopbar() {
 }
 
 function renderContent() {
+  if (STATE.view === 'grade') contentEl.classList.add('grade-wide');
+  else contentEl.classList.remove('grade-wide');
   if (STATE.view === 'overview') return renderOverview();
   if (STATE.view.startsWith('round:')) return renderRoundList(STATE.view.split(':')[1]);
   if (STATE.view === 'groups') return renderGroups();
@@ -1569,6 +1617,8 @@ function renderGrade() {
     return;
   }
 
+  const preservedEssays = takePreservedEl('gradeEssays', a.id);
+
   contentEl.innerHTML = `
     <div class="grade-nav-row">
       <button class="btn ghost small" id="backBtn">← Back to ${esc(ROUND_LABEL[round])}</button>
@@ -1595,6 +1645,7 @@ function renderGrade() {
         </select>
       </div>
     </div>
+    <div class="grade-essays" id="gradeEssaysMount"></div>
     <div class="two-col">
       <div id="gradeMain"></div>
       <div class="side-stack" id="gradeSide"></div>
@@ -1610,6 +1661,7 @@ function renderGrade() {
   else if (round === 'round1') renderRound1Grade(a, g);
   else renderRound2Grade(a, g);
 
+  mountGradeEssays(a, preservedEssays);
   renderGradeSide(a, round, g);
 }
 
@@ -1728,12 +1780,12 @@ function renderScreenGrade(a, g) {
     const val = el.dataset.val === 'NA' ? 'NA' : Number(el.dataset.val);
     g.scores[key] = g.scores[key] === val ? undefined : val;
     saveGrade('screen', a.id, 'score', key, g.scores[key]);
-    renderScreenGrade(a, g); renderGradeSide(a, 'screen', g); updateHeaderScore('screen', g, a);
+    renderScreenGrade(a, g); updateHeaderScore('screen', g, a);
   }));
   main.querySelectorAll('[data-resetauto]').forEach(el => el.addEventListener('click', () => {
     g.scores[el.dataset.resetauto] = undefined;
     saveGrade('screen', a.id, 'score', el.dataset.resetauto, undefined);
-    renderScreenGrade(a, g); renderGradeSide(a, 'screen', g); updateHeaderScore('screen', g, a);
+    renderScreenGrade(a, g); updateHeaderScore('screen', g, a);
   }));
   main.querySelectorAll('.year-tab').forEach(el => el.addEventListener('click', () => {
     g.__yearTab = el.dataset.year; renderScreenGrade(a, g);
@@ -1809,7 +1861,7 @@ function renderRound1Grade(a, g) {
     const key = el.dataset.key, val = Number(el.dataset.val);
     g.scores[key] = g.scores[key] === val ? undefined : val;
     saveGrade('round1', a.id, 'score', key, g.scores[key]);
-    renderRound1Grade(a, g); renderGradeSide(a, 'round1', g); updateHeaderScore('round1', g);
+    renderRound1Grade(a, g); updateHeaderScore('round1', g);
   }));
   main.querySelectorAll('[data-pidx]').forEach(el => el.addEventListener('click', () => {
     g.__personalityIdx = Number(el.dataset.pidx); renderRound1Grade(a, g);
@@ -1864,7 +1916,7 @@ function renderRound2Grade(a, g) {
     const key = el.dataset.key, val = Number(el.dataset.val);
     g.scores[key] = g.scores[key] === val ? undefined : val;
     saveGrade('round2', a.id, 'score', key, g.scores[key]);
-    renderRound2Grade(a, g); renderGradeSide(a, 'round2', g); updateHeaderScore('round2', g);
+    renderRound2Grade(a, g); updateHeaderScore('round2', g);
   }));
   main.querySelectorAll('[data-case]').forEach(el => el.addEventListener('click', () => {
     g.caseId = g.caseId === el.dataset.case ? undefined : el.dataset.case;
@@ -1882,17 +1934,25 @@ function renderRound2Grade(a, g) {
 function essayField(label, text, always) {
   const val = text == null ? '' : String(text);
   if (!val.trim() && !always) return '';
-  return `<div class="field-label">${esc(label)}</div><div class="essay-block">${esc(val)}</div>`;
+  return `<div class="field-label">${esc(label)}</div><div class="essay-block" data-essay="${esc(label)}">${esc(val)}</div>`;
 }
 
-function renderGradeSide(a, round, g) {
-  const side = document.getElementById('gradeSide');
-  side.innerHTML = `
-    <div class="card card-pad">
+function takePreservedEl(id, applicantId) {
+  const el = document.getElementById(id);
+  if (el && el.getAttribute('data-applicant-id') === applicantId) {
+    el.remove();
+    return el;
+  }
+  return null;
+}
+
+function applicationEssaysHtml(a) {
+  return `
+    <div class="card card-pad app-essays-card grade-essays" id="gradeEssays" data-applicant-id="${esc(a.id)}">
       <div class="section-title" style="margin-bottom:8px;">Application</div>
       ${essayField('Why Rem', a.whyRem, true)}
       <div class="field-label">Core value: ${esc(a.coreValue)}</div>
-      <div class="essay-block">${esc(a.valueEssay)}</div>
+      <div class="essay-block" data-essay="Core value essay">${esc(a.valueEssay)}</div>
       ${essayField('Career interests', a.careerInterests, true)}
       ${essayField('How joining Rem helps your career goals', a.howRemHelps, true)}
       ${essayField('Positions applying for', a.position)}
@@ -1900,7 +1960,25 @@ function renderGradeSide(a, round, g) {
       ${essayField('Accommodations', a.accommodations)}
       ${essayField('Anything else', a.other)}
       ${essayField('Commitment acknowledgment', a.commitment)}
-    </div>
+    </div>`;
+}
+
+function mountGradeEssays(a, preservedEssays) {
+  const mount = document.getElementById('gradeEssaysMount');
+  if (!mount) return;
+  if (preservedEssays) {
+    mount.replaceWith(preservedEssays);
+    preservedEssays.classList.add('grade-essays');
+    return;
+  }
+  mount.outerHTML = applicationEssaysHtml(a);
+  const essays = document.getElementById('gradeEssays');
+  if (essays) essays.classList.add('grade-essays');
+}
+
+function renderGradeSide(a, round, g) {
+  const side = document.getElementById('gradeSide');
+  side.innerHTML = `
     <div class="card card-pad">
       <div class="section-title" style="margin-bottom:6px;">Attendance</div>
       ${coffeeAttendanceBlock(a)}
