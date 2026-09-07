@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'overview-scroll-hold-20260906';
+const BUILD_STAMP = 'reject-emails-20260907';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -1734,11 +1734,16 @@ function renderAdvanceCard() {
       ${applied ? '<button type="button" class="btn ghost small" id="clearAdvance">Use everyone again</button>' : ''}
       <button type="button" class="btn small" id="copyAdvanceEmails">Copy emails</button>
       <button type="button" class="btn ghost small" id="showAdvanceEmails">Show emails</button>
+      <button type="button" class="btn small" id="copyRejectEmails"${applied ? '' : ' disabled'} title="${applied ? 'Emails of people who did not move to First Round' : 'Everyone is still in the pool'}">Copy rejection emails</button>
+      <button type="button" class="btn ghost small" id="showRejectEmails"${applied ? '' : ' disabled'} title="${applied ? 'Emails of people who did not move to First Round' : 'Everyone is still in the pool'}">Show rejection emails</button>
       <span class="advance-count">${esc(advanceCountLabel())}</span>
     </div>
     <div class="advance-status">${applied ? 'First Round is the checked list below.' : 'First Round still includes everyone — Apply top N to set the pool.'}</div>
     <div id="advanceEmailPanel" class="advance-emails" hidden>
       <textarea id="advanceEmailOut" readonly></textarea>
+    </div>
+    <div id="rejectEmailPanel" class="advance-emails" hidden>
+      <textarea id="rejectEmailOut" readonly></textarea>
     </div>
     <div class="advance-list" id="advanceList">${rows}</div>
   </div>`;
@@ -1758,6 +1763,10 @@ function bindAdvanceCard() {
   if (copyEmailsBtn) copyEmailsBtn.addEventListener('click', function () { copyAdvanceEmails(); });
   const showEmailsBtn = document.getElementById('showAdvanceEmails');
   if (showEmailsBtn) showEmailsBtn.addEventListener('click', function () { toggleAdvanceEmails(); });
+  const copyRejectBtn = document.getElementById('copyRejectEmails');
+  if (copyRejectBtn) copyRejectBtn.addEventListener('click', function () { copyRejectEmails(); });
+  const showRejectBtn = document.getElementById('showRejectEmails');
+  if (showRejectBtn) showRejectBtn.addEventListener('click', function () { toggleRejectEmails(); });
   contentEl.querySelectorAll('[data-advance]').forEach(function (box) {
     box.addEventListener('change', function (e) {
       e.stopPropagation();
@@ -1775,7 +1784,8 @@ function advanceCountLabel() {
   const poolN = poolForRound('round1').length;
   const applied = hasExplicitAdvance();
   const emailN = selectedAdvanceEmails().length;
-  return selected + ' selected · N = ' + topN + (applied ? ' · ' + poolN + ' in First Round' : '') + ' · ' + emailN + ' emails';
+  const rejectN = selectedRejectionEmails().length;
+  return selected + ' selected · N = ' + topN + (applied ? ' · ' + poolN + ' in First Round' : '') + ' · ' + emailN + ' emails' + (applied ? ' · ' + rejectN + ' rejection emails' : '');
 }
 
 function bindClearAdvanceButton(btn) {
@@ -1825,6 +1835,7 @@ function refreshAdvanceUi() {
   if (emailOut && emailPanel && !emailPanel.hidden) {
     emailOut.value = advanceEmailText('\n');
   }
+  syncRejectEmailControls();
 }
 
 function selectedAdvanceApplicants() {
@@ -1881,6 +1892,83 @@ function toggleAdvanceEmails() {
   out.value = advanceEmailText('\n');
   panel.hidden = false;
   if (btn) btn.textContent = 'Hide emails';
+  out.focus();
+  out.select();
+}
+
+function selectedRejectionApplicants() {
+  if (!hasExplicitAdvance()) return [];
+  return STATE.applicants.filter(function (a) { return STATE.advance.round1[a.id] !== true; });
+}
+
+function selectedRejectionEmails() {
+  return selectedRejectionApplicants().map(function (a) {
+    return String(a.email || '').trim();
+  }).filter(Boolean);
+}
+
+function rejectEmailText(sep) {
+  return selectedRejectionEmails().join(sep == null ? '\n' : sep);
+}
+
+function syncRejectEmailControls() {
+  const applied = hasExplicitAdvance();
+  ['copyRejectEmails', 'showRejectEmails'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = !applied;
+    el.title = applied ? 'Emails of people who did not move to First Round' : 'Everyone is still in the pool';
+  });
+  const panel = document.getElementById('rejectEmailPanel');
+  const out = document.getElementById('rejectEmailOut');
+  const btn = document.getElementById('showRejectEmails');
+  if (!applied && panel && !panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.textContent = 'Show rejection emails';
+  } else if (out && panel && !panel.hidden) {
+    out.value = rejectEmailText('\n');
+  }
+}
+
+async function copyRejectEmails() {
+  if (!hasExplicitAdvance()) { toast('Everyone is still in the pool'); return; }
+  const text = rejectEmailText(', ');
+  if (!text) { toast('No emails on the rejection set'); return; }
+  let ok = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (e) { /* fall through */ }
+  if (!ok) {
+    const panel = document.getElementById('rejectEmailPanel');
+    const out = document.getElementById('rejectEmailOut');
+    if (panel && out) {
+      panel.hidden = false;
+      out.value = text;
+      out.focus();
+      out.select();
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    }
+  }
+  toast(ok ? 'Copied ' + selectedRejectionEmails().length + ' rejection emails' : 'Could not copy — use Show rejection emails and copy from there');
+}
+
+function toggleRejectEmails() {
+  if (!hasExplicitAdvance()) { toast('Everyone is still in the pool'); return; }
+  const panel = document.getElementById('rejectEmailPanel');
+  const out = document.getElementById('rejectEmailOut');
+  const btn = document.getElementById('showRejectEmails');
+  if (!panel || !out) return;
+  if (!panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.textContent = 'Show rejection emails';
+    return;
+  }
+  out.value = rejectEmailText('\n');
+  panel.hidden = false;
+  if (btn) btn.textContent = 'Hide rejection emails';
   out.focus();
   out.select();
 }
