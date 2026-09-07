@@ -578,7 +578,7 @@ window.BOOTSTRAP = {"meta":{"builtAt":"2026-09-05","applicantCount":248,"coffeeC
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'reject-emails-20260907';
+const BUILD_STAMP = 'biz-majors-round1-20260907';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -2311,6 +2311,8 @@ function renderAdvanceCard() {
       <button type="button" class="btn ghost small" id="showAdvanceEmails">Show emails</button>
       <button type="button" class="btn small" id="copyRejectEmails"${applied ? '' : ' disabled'} title="${applied ? 'Emails of people who did not move to First Round' : 'Everyone is still in the pool'}">Copy rejection emails</button>
       <button type="button" class="btn ghost small" id="showRejectEmails"${applied ? '' : ' disabled'} title="${applied ? 'Emails of people who did not move to First Round' : 'Everyone is still in the pool'}">Show rejection emails</button>
+      <button type="button" class="btn small" id="copyBusinessEmails" title="Emails of business majors in First Round">Copy business emails</button>
+      <button type="button" class="btn ghost small" id="showBusinessMajors" title="Name, major, and email of business majors in First Round">Show business majors</button>
       <span class="advance-count">${esc(advanceCountLabel())}</span>
     </div>
     <div class="advance-status">${applied ? 'First Round is the checked list below.' : 'First Round still includes everyone — Apply top N to set the pool.'}</div>
@@ -2319,6 +2321,9 @@ function renderAdvanceCard() {
     </div>
     <div id="rejectEmailPanel" class="advance-emails" hidden>
       <textarea id="rejectEmailOut" readonly></textarea>
+    </div>
+    <div id="businessMajorPanel" class="advance-emails" hidden>
+      <textarea id="businessMajorOut" readonly></textarea>
     </div>
     <div class="advance-list" id="advanceList">${rows}</div>
   </div>`;
@@ -2342,6 +2347,10 @@ function bindAdvanceCard() {
   if (copyRejectBtn) copyRejectBtn.addEventListener('click', function () { copyRejectEmails(); });
   const showRejectBtn = document.getElementById('showRejectEmails');
   if (showRejectBtn) showRejectBtn.addEventListener('click', function () { toggleRejectEmails(); });
+  const copyBizBtn = document.getElementById('copyBusinessEmails');
+  if (copyBizBtn) copyBizBtn.addEventListener('click', function () { copyBusinessEmails(); });
+  const showBizBtn = document.getElementById('showBusinessMajors');
+  if (showBizBtn) showBizBtn.addEventListener('click', function () { toggleBusinessMajors(); });
   contentEl.querySelectorAll('[data-advance]').forEach(function (box) {
     box.addEventListener('change', function (e) {
       e.stopPropagation();
@@ -2350,6 +2359,7 @@ function bindAdvanceCard() {
     });
   });
   bindAdvanceListScrollGuard();
+  syncBusinessMajorControls();
 }
 
 function advanceCountLabel() {
@@ -2360,7 +2370,8 @@ function advanceCountLabel() {
   const applied = hasExplicitAdvance();
   const emailN = selectedAdvanceEmails().length;
   const rejectN = selectedRejectionEmails().length;
-  return selected + ' selected · N = ' + topN + (applied ? ' · ' + poolN + ' in First Round' : '') + ' · ' + emailN + ' emails' + (applied ? ' · ' + rejectN + ' rejection emails' : '');
+  const bizN = selectedBusinessAdvanceApplicants().length;
+  return selected + ' selected · N = ' + topN + (applied ? ' · ' + poolN + ' in First Round' : '') + ' · ' + emailN + ' emails' + (applied ? ' · ' + rejectN + ' rejection emails' : '') + ' · ' + bizN + ' business majors';
 }
 
 function bindClearAdvanceButton(btn) {
@@ -2411,6 +2422,7 @@ function refreshAdvanceUi() {
     emailOut.value = advanceEmailText('\n');
   }
   syncRejectEmailControls();
+  syncBusinessMajorControls();
 }
 
 function selectedAdvanceApplicants() {
@@ -2544,6 +2556,130 @@ function toggleRejectEmails() {
   out.value = rejectEmailText('\n');
   panel.hidden = false;
   if (btn) btn.textContent = 'Hide rejection emails';
+  out.focus();
+  out.select();
+}
+
+const BUSINESS_MAJOR_NEEDLES = [
+  'finance',
+  'marketing',
+  'management',
+  'information systems',
+  'business administration',
+  'business admin',
+  'accounting',
+];
+
+function isManagementFalsePositive(text) {
+  return /\bsports?\s+management\b/.test(text) || /\bconstruction\s+management\b/.test(text);
+}
+
+function isBusinessMajor(major) {
+  const raw = String(major || '').trim();
+  if (!raw) return false;
+  const parts = raw.split(/[,;]/);
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i].toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!part) continue;
+    const hasOtherNeedle = BUSINESS_MAJOR_NEEDLES.some(function (n) {
+      return n !== 'management' && part.indexOf(n) !== -1;
+    });
+    if (isManagementFalsePositive(part) && !hasOtherNeedle) continue;
+    for (let j = 0; j < BUSINESS_MAJOR_NEEDLES.length; j++) {
+      if (part.indexOf(BUSINESS_MAJOR_NEEDLES[j]) !== -1) return true;
+    }
+  }
+  return false;
+}
+
+function selectedBusinessAdvanceApplicants() {
+  return selectedAdvanceApplicants().filter(function (a) { return isBusinessMajor(a.major); });
+}
+
+function selectedBusinessAdvanceEmails() {
+  return selectedBusinessAdvanceApplicants().map(function (a) {
+    return String(a.email || '').trim();
+  }).filter(Boolean);
+}
+
+function businessAdvanceEmailText(sep) {
+  return selectedBusinessAdvanceEmails().join(sep == null ? '\n' : sep);
+}
+
+function businessAdvanceVerifyText() {
+  return selectedBusinessAdvanceApplicants().map(function (a) {
+    const name = String(a.name || '').trim() || '(no name)';
+    const major = String(a.major || '').trim() || '(no major)';
+    const email = String(a.email || '').trim() || '(no email)';
+    return name + ' — ' + major + ' — ' + email;
+  }).join('\n');
+}
+
+function syncBusinessMajorControls() {
+  const n = selectedBusinessAdvanceApplicants().length;
+  const empty = n === 0;
+  ['copyBusinessEmails', 'showBusinessMajors'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = empty;
+    el.title = empty
+      ? 'No business majors in First Round'
+      : (id === 'copyBusinessEmails'
+        ? 'Emails of business majors in First Round'
+        : 'Name, major, and email of business majors in First Round');
+  });
+  const panel = document.getElementById('businessMajorPanel');
+  const out = document.getElementById('businessMajorOut');
+  const btn = document.getElementById('showBusinessMajors');
+  if (empty && panel && !panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.textContent = 'Show business majors';
+  } else if (out && panel && !panel.hidden) {
+    out.value = businessAdvanceVerifyText();
+  }
+}
+
+async function copyBusinessEmails() {
+  const people = selectedBusinessAdvanceApplicants();
+  if (!people.length) { toast('No business majors in First Round'); return; }
+  const text = businessAdvanceEmailText(', ');
+  if (!text) { toast('No business majors in First Round'); return; }
+  let ok = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (e) { /* fall through */ }
+  if (!ok) {
+    const panel = document.getElementById('businessMajorPanel');
+    const out = document.getElementById('businessMajorOut');
+    if (panel && out) {
+      panel.hidden = false;
+      out.value = text;
+      out.focus();
+      out.select();
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    }
+  }
+  toast(ok ? 'Copied ' + selectedBusinessAdvanceEmails().length + ' business emails' : 'Could not copy — use Show business majors and copy from there');
+}
+
+function toggleBusinessMajors() {
+  const people = selectedBusinessAdvanceApplicants();
+  if (!people.length) { toast('No business majors in First Round'); return; }
+  const panel = document.getElementById('businessMajorPanel');
+  const out = document.getElementById('businessMajorOut');
+  const btn = document.getElementById('showBusinessMajors');
+  if (!panel || !out) return;
+  if (!panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.textContent = 'Show business majors';
+    return;
+  }
+  out.value = businessAdvanceVerifyText();
+  panel.hidden = false;
+  if (btn) btn.textContent = 'Hide business majors';
   out.focus();
   out.select();
 }
