@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'biz-majors-round1-20260907';
+const BUILD_STAMP = 'cs-is-true-major-20260907';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -1995,17 +1995,52 @@ const BUSINESS_MAJOR_NEEDLES = [
   'accounting',
 ];
 
+// Form option is "Computer Science / Information Systems" but people are usually one.
+// Classified from resume and/or LinkedIn. Omitted = unknown (do not treat as IS).
+const CS_IS_TRUE_MAJOR = {
+  a8_57e3cb9d: 'IS',
+  a11_d5e778be: 'IS',
+  a21_f7ec1864: 'CS',
+  a40_8dd93674: 'IS',
+  a57_7fb0a1c0: 'IS',
+  a95_4c3308be: 'IS',
+  a114_9684b255: 'IS',
+  a115_07c2071b: 'IS',
+  a189_b62fdd11: 'IS',
+  a191_2b5f67cc: 'IS',
+  a195_8c677728: 'IS',
+  a196_0d8f3f4b: 'IS',
+  a220_26620dd3: 'CS',
+  a222_6b888c06: 'IS',
+  a228_f0baad0b: 'IS',
+  a244_f97f5683: 'CS',
+};
+
 function isManagementFalsePositive(text) {
   return /\bsports?\s+management\b/.test(text) || /\bconstruction\s+management\b/.test(text);
 }
 
-function isBusinessMajor(major) {
-  const raw = String(major || '').trim();
+function isCombinedCsisPart(part) {
+  return part.indexOf('computer science') !== -1 && part.indexOf('information systems') !== -1;
+}
+
+function csisOverrideFor(a) {
+  if (!a || !a.id) return '';
+  return CS_IS_TRUE_MAJOR[a.id] || '';
+}
+
+function isBusinessMajor(a) {
+  const raw = (a && typeof a === 'object') ? String(a.major || '').trim() : String(a || '').trim();
+  const override = (a && typeof a === 'object') ? csisOverrideFor(a) : '';
   if (!raw) return false;
   const parts = raw.split(/[,;]/);
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i].toLowerCase().replace(/\s+/g, ' ').trim();
     if (!part) continue;
+    if (isCombinedCsisPart(part)) {
+      if (override === 'IS' || override === 'both') return true;
+      continue;
+    }
     const hasOtherNeedle = BUSINESS_MAJOR_NEEDLES.some(function (n) {
       return n !== 'management' && part.indexOf(n) !== -1;
     });
@@ -2017,8 +2052,26 @@ function isBusinessMajor(major) {
   return false;
 }
 
+function displayBusinessMajor(a) {
+  const form = String((a && a.major) || '').trim() || '(no major)';
+  const override = csisOverrideFor(a);
+  if (!override) return form;
+  const classified = override === 'both'
+    ? 'Computer Science / Information Systems'
+    : (override === 'IS' ? 'Information Systems' : 'Computer Science');
+  const extras = form.split(/[,;]/).map(function (p) {
+    return p.replace(/\s+/g, ' ').trim();
+  }).filter(function (p) {
+    if (!p) return false;
+    return !isCombinedCsisPart(p.toLowerCase());
+  });
+  const shown = [classified].concat(extras).join(', ');
+  const formShort = form.replace(/Computer Science \/ Information Systems/gi, 'CS/IS');
+  return shown + ' (form: ' + formShort + ')';
+}
+
 function selectedBusinessAdvanceApplicants() {
-  return selectedAdvanceApplicants().filter(function (a) { return isBusinessMajor(a.major); });
+  return selectedAdvanceApplicants().filter(function (a) { return isBusinessMajor(a); });
 }
 
 function selectedBusinessAdvanceEmails() {
@@ -2034,7 +2087,7 @@ function businessAdvanceEmailText(sep) {
 function businessAdvanceVerifyText() {
   return selectedBusinessAdvanceApplicants().map(function (a) {
     const name = String(a.name || '').trim() || '(no name)';
-    const major = String(a.major || '').trim() || '(no major)';
+    const major = displayBusinessMajor(a);
     const email = String(a.email || '').trim() || '(no email)';
     return name + ' — ' + major + ' — ' + email;
   }).join('\n');
