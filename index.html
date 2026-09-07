@@ -578,7 +578,7 @@ window.BOOTSTRAP = {"meta":{"builtAt":"2026-09-05","applicantCount":248,"coffeeC
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'search-advance-scroll-20260906';
+const BUILD_STAMP = 'overview-scroll-hold-20260906';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -702,7 +702,13 @@ async function pollForUpdates() {
     currentSha = json.sha;
     const data = JSON.parse(b64DecodeUtf8(json.content));
     if (!liveVersion || (data.updatedAt || 0) > liveVersion) {
+      const prevAdvance = advanceFingerprint(STATE.advance);
       adoptState(data);
+      const advanceChanged = prevAdvance !== advanceFingerprint(STATE.advance);
+      if (STATE.view === 'overview' && !pollShouldRemountOverview(advanceChanged)) {
+        applyLiveOverviewUpdate(advanceChanged);
+        return;
+      }
       render();
     }
   } catch (e) { /* try again next tick */ }
@@ -2077,16 +2083,21 @@ function restoreGradeScroll(snap) {
 }
 
 let lastGradeKey = null;
+let lastOverviewView = false;
 
 function render() {
   invalidateScreenStd();
   const sameGrade = !!(gradeViewKey() && gradeViewKey() === lastGradeKey);
-  const snap = sameGrade ? captureGradeScroll() : null;
+  const gradeSnap = sameGrade ? captureGradeScroll() : null;
+  const sameOverview = STATE.view === 'overview' && lastOverviewView;
+  const overviewSnap = sameOverview ? captureOverviewScroll() : null;
   renderRail();
   renderTopbar();
   renderContent();
   lastGradeKey = gradeViewKey();
-  if (snap) restoreGradeScroll(snap);
+  lastOverviewView = STATE.view === 'overview';
+  if (gradeSnap) restoreGradeScroll(gradeSnap);
+  if (overviewSnap) restoreOverviewScroll(overviewSnap);
 }
 
 function railBtn(id, label, count) {
@@ -2329,6 +2340,7 @@ function bindAdvanceCard() {
       refreshAdvanceUi();
     });
   });
+  bindAdvanceListScrollGuard();
 }
 
 function advanceCountLabel() {
@@ -2448,17 +2460,73 @@ function toggleAdvanceEmails() {
   out.select();
 }
 
+let lastOverviewScroll = { mainTop: 0, contentTop: 0, listTop: 0 };
+let advanceListHover = false;
+let advanceListScrollAt = 0;
+const ADVANCE_SCROLL_GUARD_MS = 8000;
+
+function advanceFingerprint(adv) {
+  const a = adv || emptyAdvance();
+  const r1 = a.round1 || {};
+  const keys = Object.keys(r1).sort();
+  const bits = keys.map(function (k) { return k + ':' + (r1[k] ? '1' : '0'); }).join(',');
+  return (a.applied ? '1' : '0') + '|' + String(a.topN == null ? '' : a.topN) + '|' + bits;
+}
+
+function noteAdvanceListActivity() {
+  advanceListScrollAt = Date.now();
+  const list = document.getElementById('advanceList') || document.querySelector('.advance-list');
+  if (list) lastOverviewScroll.listTop = list.scrollTop;
+}
+
+function advanceListRecentlyUsed() {
+  return advanceListHover || (Date.now() - advanceListScrollAt) < ADVANCE_SCROLL_GUARD_MS;
+}
+
+function bindAdvanceListScrollGuard() {
+  const list = document.getElementById('advanceList') || document.querySelector('.advance-list');
+  if (!list || list.dataset.scrollGuard === '1') return;
+  list.dataset.scrollGuard = '1';
+  list.addEventListener('pointerenter', function () { advanceListHover = true; });
+  list.addEventListener('pointerleave', function () { advanceListHover = false; });
+  list.addEventListener('scroll', noteAdvanceListActivity, { passive: true });
+  list.addEventListener('wheel', noteAdvanceListActivity, { passive: true });
+}
+
+function syncAdvanceCheckboxesFromState() {
+  document.querySelectorAll('[data-advance]').forEach(function (box) {
+    const on = isAdvanceChecked(box.dataset.advance);
+    if (box.checked !== on) box.checked = on;
+  });
+  refreshAdvanceUi();
+}
+
+function applyLiveOverviewUpdate(advanceChanged) {
+  if (advanceChanged) syncAdvanceCheckboxesFromState();
+  setSaveStatus(STATE.saveStatus);
+}
+
+function pollShouldRemountOverview(advanceChanged) {
+  if (STATE.view !== 'overview') return true;
+  if (advanceListRecentlyUsed()) return false;
+  if (!advanceChanged) return false;
+  return true;
+}
+
 function captureOverviewScroll() {
   const main = pageScrollEl();
   const list = document.getElementById('advanceList') || document.querySelector('.advance-list');
-  return {
-    mainTop: main ? main.scrollTop : 0,
-    contentTop: contentEl ? contentEl.scrollTop : 0,
-    listTop: list ? list.scrollTop : 0,
+  const snap = {
+    mainTop: main ? main.scrollTop : lastOverviewScroll.mainTop,
+    contentTop: contentEl ? contentEl.scrollTop : lastOverviewScroll.contentTop,
+    listTop: list ? list.scrollTop : lastOverviewScroll.listTop,
   };
+  lastOverviewScroll = snap;
+  return snap;
 }
 
 function restoreOverviewScroll(snap) {
+  if (!snap) snap = lastOverviewScroll;
   if (!snap) return;
   function apply() {
     const main = pageScrollEl();
@@ -2466,6 +2534,7 @@ function restoreOverviewScroll(snap) {
     if (main) main.scrollTop = snap.mainTop;
     if (contentEl) contentEl.scrollTop = snap.contentTop;
     if (list) list.scrollTop = snap.listTop;
+    bindAdvanceListScrollGuard();
   }
   apply();
   requestAnimationFrame(apply);
