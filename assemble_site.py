@@ -25,6 +25,16 @@ html = f"""<!doctype html>
 </style>
 </head>
 <body>
+<div id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+  <form id="gateForm" class="gate-card" autocomplete="off">
+    <h1 id="gateTitle">REM UF Recruitment</h1>
+    <p>Enter the recruitment password to open the dashboard.</p>
+    <label class="sr-only" for="gatePassword">Password</label>
+    <input type="password" id="gatePassword" name="password" autocomplete="current-password" autofocus>
+    <button type="submit" class="btn primary">Enter</button>
+    <p id="gateErr" class="gate-err" hidden>Wrong password</p>
+  </form>
+</div>
 <div id="app">
   <div class="rail" id="rail"></div>
   <div class="main">
@@ -33,7 +43,9 @@ html = f"""<!doctype html>
   </div>
 </div>
 <div class="toast" id="toast"></div>
-
+<script>
+try {{ if (sessionStorage.getItem('rem_uf_gate_ok') === '1') document.body.classList.add('unlocked'); }} catch (e) {{}}
+</script>
 <script>
 window.BOOTSTRAP = {bootstrap_json};
 </script>

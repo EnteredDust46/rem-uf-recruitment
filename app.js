@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'layout-know-20260906';
+const BUILD_STAMP = 'std-emails-gate-20260906';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -347,6 +347,7 @@ async function flushSave(urgent) {
 
 // Every write goes through these, so the op is stashed before the state changes.
 function saveGrade(round, applicantId, field, key, value) {
+  if (round === 'screen') invalidateScreenStd();
   recordOp({ kind: 'grade', round: round, id: applicantId, field: field, key: key, value: value === undefined ? null : value });
   queueSave();
 }
@@ -380,6 +381,7 @@ function saveGroupsAndAssignments() {
 
 function saveAssignment(round, applicantId, groupId) {
   autoAssignCache.poolKey = null;
+  if (round === 'screen') invalidateScreenStd();
   recordOp({ kind: 'assign', round: round, id: applicantId, value: groupId });
   queueSave();
 }
@@ -404,6 +406,10 @@ function reassignKnownPerson(round, applicantId) {
   toast('Reassigned to ' + next.name);
   const picker = document.getElementById('groupPicker');
   if (picker) picker.value = next.id;
+  if (round === 'screen') {
+    const a = STATE.byId[applicantId];
+    updateHeaderScore('screen', getGrade('screen', applicantId), a);
+  }
 }
 
 function saveAdvance() {
@@ -933,6 +939,86 @@ function scoreFor(round, applicantId) {
   return null;
 }
 
+// Group-adjusted Application Screen score: keep a /5-ish scale so it can be
+// averaged with the raw weighted score. Derived live — never stored.
+//   standardized = raw - groupMean + overallMean
+// Groups with fewer than two scored people fall back to raw (no fake sd).
+let _screenStdBundle = null;
+function invalidateScreenStd() { _screenStdBundle = null; }
+
+function screenStdBundle() {
+  if (_screenStdBundle) return _screenStdBundle;
+  const groups = {};
+  const all = [];
+  STATE.applicants.forEach(function (a) {
+    const raw = scoreFor('screen', a.id);
+    if (raw == null) return;
+    const gid = ensureAssignment('screen', a.id) || '';
+    if (!groups[gid]) groups[gid] = [];
+    groups[gid].push(raw);
+    all.push(raw);
+  });
+  const overallMean = all.length ? all.reduce(function (s, v) { return s + v; }, 0) / all.length : null;
+  const stats = {};
+  Object.keys(groups).forEach(function (gid) {
+    const vals = groups[gid];
+    const n = vals.length;
+    const mean = vals.reduce(function (s, v) { return s + v; }, 0) / n;
+    let sd = 0;
+    if (n >= 2) {
+      const varSum = vals.reduce(function (s, v) { return s + (v - mean) * (v - mean); }, 0);
+      sd = Math.sqrt(varSum / (n - 1));
+    }
+    stats[gid] = { n: n, mean: mean, sd: sd };
+  });
+  _screenStdBundle = { overallMean: overallMean, groups: stats };
+  return _screenStdBundle;
+}
+
+function standardizedScreenScore(applicantId) {
+  const raw = scoreFor('screen', applicantId);
+  if (raw == null) return null;
+  const bundle = screenStdBundle();
+  const gid = ensureAssignment('screen', applicantId) || '';
+  const grp = bundle.groups[gid];
+  if (!grp || grp.n < 2 || bundle.overallMean == null) return raw;
+  return raw - grp.mean + bundle.overallMean;
+}
+
+function screenZScore(applicantId) {
+  const raw = scoreFor('screen', applicantId);
+  if (raw == null) return null;
+  const bundle = screenStdBundle();
+  const gid = ensureAssignment('screen', applicantId) || '';
+  const grp = bundle.groups[gid];
+  if (!grp || grp.n < 2 || !grp.sd) return null;
+  return (raw - grp.mean) / grp.sd;
+}
+
+function screenBlendScore(applicantId) {
+  const raw = scoreFor('screen', applicantId);
+  if (raw == null) return null;
+  const std = standardizedScreenScore(applicantId);
+  return (raw + std) / 2;
+}
+
+function formatScreenScorePair(applicantId) {
+  const raw = scoreFor('screen', applicantId);
+  if (raw == null) return '—';
+  const std = standardizedScreenScore(applicantId);
+  return raw.toFixed(1) + ' raw · ' + std.toFixed(1) + ' std';
+}
+
+function formatScreenScorePairHtml(applicantId) {
+  const raw = scoreFor('screen', applicantId);
+  if (raw == null) return '—';
+  const std = standardizedScreenScore(applicantId);
+  const z = screenZScore(applicantId);
+  const title = z == null ? 'Group-adjusted to the overall mean so harsh/easy review groups are comparable'
+    : 'z ' + (z >= 0 ? '+' : '') + z.toFixed(1) + ' vs review group';
+  return '<span title="' + esc(title) + '">' + raw.toFixed(1) + ' raw · ' + std.toFixed(1) + ' std</span>';
+}
+
 // ---------------- Groups ----------------
 // Groups carry a share of the pool rather than an equal split, so a pair with less
 // capacity (Aya & Adam) gets proportionally fewer applicants. Shares are assigned by
@@ -1068,14 +1154,15 @@ function poolForRound(round) {
 }
 
 function scoredScreenApplicants() {
+  invalidateScreenStd();
   return STATE.applicants.filter(function (a) {
     return hasManualScore(STATE.grades.screen[a.id]);
   }).slice().sort(function (a, b) {
-    const as = scoreFor('screen', a.id);
-    const bs = scoreFor('screen', b.id);
-    const av = as == null ? -1 : as;
-    const bv = bs == null ? -1 : bs;
-    if (bv !== av) return bv - av;
+    const av = screenBlendScore(a.id);
+    const bv = screenBlendScore(b.id);
+    const aN = av == null ? -1 : av;
+    const bN = bv == null ? -1 : bv;
+    if (bN !== aN) return bN - aN;
     return (a.name || '').localeCompare(b.name || '');
   });
 }
@@ -1185,7 +1272,10 @@ function sortApplicantList(list, round) {
     let av, bv;
     if (STATE.sortKey === 'name') { av = a.name; bv = b.name; }
     else if (STATE.sortKey === 'gpa') { av = autoFor(a).gpa.value ?? -1; bv = autoFor(b).gpa.value ?? -1; }
-    else if (STATE.sortKey === 'score') { av = scoreFor(round, a.id) ?? -1; bv = scoreFor(round, b.id) ?? -1; }
+    else if (STATE.sortKey === 'score') {
+      if (round === 'screen') { av = screenBlendScore(a.id) ?? -1; bv = screenBlendScore(b.id) ?? -1; }
+      else { av = scoreFor(round, a.id) ?? -1; bv = scoreFor(round, b.id) ?? -1; }
+    }
     else if (STATE.sortKey === 'group') { av = ensureAssignment(round, a.id) || ''; bv = ensureAssignment(round, b.id) || ''; }
     else { av = a.name; bv = b.name; }
     if (av < bv) return STATE.sortDir === 'asc' ? -1 : 1;
@@ -1414,6 +1504,7 @@ function restoreGradeScroll(snap) {
 let lastGradeKey = null;
 
 function render() {
+  invalidateScreenStd();
   const sameGrade = !!(gradeViewKey() && gradeViewKey() === lastGradeKey);
   const snap = sameGrade ? captureGradeScroll() : null;
   renderRail();
@@ -1616,26 +1707,31 @@ function renderAdvanceCard() {
   const poolN = poolForRound('round1').length;
   const applied = hasExplicitAdvance();
   const rows = ranked.map(function (a) {
-    const s = scoreFor('screen', a.id);
     const on = isAdvanceChecked(a.id);
     return `<label class="advance-row">
       <input type="checkbox" data-advance="${esc(a.id)}" ${on ? 'checked' : ''}>
       <span class="nm">${esc(a.name)}</span>
       <span class="sub">${esc(a.classYear || '')}</span>
-      <span class="mono">${s == null ? '—' : s.toFixed(1)}</span>
+      <span class="mono">${formatScreenScorePairHtml(a.id)}</span>
     </label>`;
   }).join('') || '<div class="sub" style="color:var(--slate); padding:8px 0;">No hand-scored Application Screens yet — only people with a real screen score compete for top N.</div>';
+  const emailN = selectedAdvanceEmails().length;
   return `<div class="card card-pad advance-card" style="margin-bottom:22px;">
     <div class="section-title">Who advances to First Round <span class="n">from Application Screen</span></div>
-    <p class="advance-copy">Apply top N to set the First Round pool. Until then, First Round still includes everyone. Apply top N resets the checks to the N highest Application Screen scores (weighted /5), then you can check or uncheck people. Changing N and applying again resets to the new top N. Saved for everyone — scores do not auto-advance anyone.</p>
+    <p class="advance-copy">Apply top N to set the First Round pool. Until then, First Round still includes everyone. Apply top N resets the checks to the N highest scores — ranked by the average of raw weighted /5 and group-standardized — then you can check or uncheck people. Changing N and applying again resets to the new top N. Saved for everyone — scores do not auto-advance anyone.</p>
     <div class="advance-controls">
       <label class="advance-n-label" for="advanceTopN">Advance top N</label>
       <input type="number" id="advanceTopN" min="0" step="1" value="${topN}">
       <button type="button" class="btn primary small" id="applyTopN">Apply top N</button>
       ${applied ? '<button type="button" class="btn ghost small" id="clearAdvance">Use everyone again</button>' : ''}
-      <span class="advance-count">${selected} selected · N = ${topN}${applied ? ' · ' + poolN + ' in First Round' : ''}</span>
+      <button type="button" class="btn small" id="copyAdvanceEmails">Copy emails</button>
+      <button type="button" class="btn ghost small" id="showAdvanceEmails">Show emails</button>
+      <span class="advance-count">${selected} selected · N = ${topN}${applied ? ' · ' + poolN + ' in First Round' : ''} · ${emailN} emails</span>
     </div>
     <div class="advance-status">${applied ? 'First Round is the checked list below.' : 'First Round still includes everyone — Apply top N to set the pool.'}</div>
+    <div id="advanceEmailPanel" class="advance-emails" hidden>
+      <textarea id="advanceEmailOut" readonly></textarea>
+    </div>
     <div class="advance-list">${rows}</div>
   </div>`;
 }
@@ -1647,7 +1743,7 @@ function bindAdvanceCard() {
     const n = nInput ? Number(nInput.value) : 0;
     applyAdvanceTopN(n);
     renderOverviewPreserveScroll();
-    toast('First Round set to top ' + Math.max(0, Math.floor(Number(n) || 0)) + ' by Application Screen score');
+    toast('First Round set to top ' + Math.max(0, Math.floor(Number(n) || 0)) + ' by blended screen score');
   });
   const clearBtn = document.getElementById('clearAdvance');
   if (clearBtn) clearBtn.addEventListener('click', function () {
@@ -1655,6 +1751,10 @@ function bindAdvanceCard() {
     renderOverviewPreserveScroll();
     toast('First Round includes everyone again');
   });
+  const copyEmailsBtn = document.getElementById('copyAdvanceEmails');
+  if (copyEmailsBtn) copyEmailsBtn.addEventListener('click', function () { copyAdvanceEmails(); });
+  const showEmailsBtn = document.getElementById('showAdvanceEmails');
+  if (showEmailsBtn) showEmailsBtn.addEventListener('click', function () { toggleAdvanceEmails(); });
   contentEl.querySelectorAll('[data-advance]').forEach(function (box) {
     box.addEventListener('change', function (e) {
       e.stopPropagation();
@@ -1662,6 +1762,64 @@ function bindAdvanceCard() {
       renderOverviewPreserveScroll();
     });
   });
+}
+
+function selectedAdvanceApplicants() {
+  if (hasExplicitAdvance()) {
+    return STATE.applicants.filter(function (a) { return STATE.advance.round1[a.id] === true; });
+  }
+  return STATE.applicants.slice();
+}
+
+function selectedAdvanceEmails() {
+  return selectedAdvanceApplicants().map(function (a) {
+    return String(a.email || '').trim();
+  }).filter(Boolean);
+}
+
+function advanceEmailText(sep) {
+  return selectedAdvanceEmails().join(sep == null ? '\n' : sep);
+}
+
+async function copyAdvanceEmails() {
+  const text = advanceEmailText(', ');
+  if (!text) { toast('No emails on the current advance set'); return; }
+  let ok = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (e) { /* fall through */ }
+  if (!ok) {
+    const panel = document.getElementById('advanceEmailPanel');
+    const out = document.getElementById('advanceEmailOut');
+    if (panel && out) {
+      panel.hidden = false;
+      out.value = text;
+      out.focus();
+      out.select();
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    }
+  }
+  toast(ok ? 'Copied ' + selectedAdvanceEmails().length + ' emails' : 'Could not copy — use Show emails and copy from there');
+}
+
+function toggleAdvanceEmails() {
+  const panel = document.getElementById('advanceEmailPanel');
+  const out = document.getElementById('advanceEmailOut');
+  const btn = document.getElementById('showAdvanceEmails');
+  if (!panel || !out) return;
+  if (!panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.textContent = 'Show emails';
+    return;
+  }
+  out.value = advanceEmailText('\n');
+  panel.hidden = false;
+  if (btn) btn.textContent = 'Hide emails';
+  out.focus();
+  out.select();
 }
 
 function renderOverviewPreserveScroll() {
@@ -1857,7 +2015,7 @@ function renderFlaggedList() {
               <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${flagBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
               <td>${gpaCell(a)}</td>
               <td>${esc(ROUND_LABEL[round] || round)}</td>
-              <td><span class="score-pill">${score === null ? '—' : (round === 'round2' ? score : round === 'screen' ? score.toFixed(1) + ' / 5' : score.toFixed(1))}</span></td>
+              <td><span class="score-pill${round === 'screen' && score !== null ? ' pair' : ''}">${score === null ? '—' : (round === 'round2' ? score : round === 'screen' ? formatScreenScorePairHtml(a.id) : score.toFixed(1))}</span></td>
             </tr>`;
           }).join('') || `<tr><td colspan="4"><div class="empty-state">No one is flagged for a second reviewer.</div></td></tr>`}
         </tbody>
@@ -1910,7 +2068,7 @@ function renderRow(round, a) {
     <td>${esc(truncate(a.position, 28))}</td>
     <td>${attendanceIcons(a)}</td>
     <td>${grp ? esc(grp.name) : '—'}</td>
-    <td><span class="score-pill ${scoreClass}">${score === null ? '—' : (round === 'round2' ? score : round === 'screen' ? score.toFixed(1) + ' / 5' : score.toFixed(1))}</span></td>
+    <td><span class="score-pill ${scoreClass}${round === 'screen' && score !== null ? ' pair' : ''}">${score === null ? '—' : (round === 'round2' ? score : round === 'screen' ? formatScreenScorePairHtml(a.id) : score.toFixed(1))}</span></td>
   </tr>`;
 }
 
@@ -1993,7 +2151,7 @@ function renderGrade() {
         </div>
       </div>
       <div class="assign-block">
-        <div class="avg-display"><span class="big">${fmtScore(round, g, a)}</span><span class="of">${round === 'round2' ? '/ 24' : round === 'round1' ? '/ 4 avg' : '/ 5 avg'}</span></div>
+        <div class="avg-display">${headerScoreInner(round, g, a)}</div>
         <div class="field-label assign-label">Assigned review group</div>
         <select id="groupPicker" title="Who is reviewing this application">
           ${STATE.groups.map(gr => `<option value="${gr.id}" ${ensureAssignment(round, a.id) === gr.id ? 'selected' : ''}>${esc(gr.name)}</option>`).join('')}
@@ -2006,6 +2164,7 @@ function renderGrade() {
   document.getElementById('backBtn').addEventListener('click', () => { STATE.queueDone = false; STATE.view = STATE.returnView || ('round:' + round); render(); });
   document.getElementById('groupPicker').addEventListener('change', e => {
     STATE.assignments[round][a.id] = e.target.value; saveAssignment(round, a.id, e.target.value);
+    if (round === 'screen') updateHeaderScore('screen', g, a);
   });
   contentEl.querySelectorAll('[data-layout]').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -2033,6 +2192,21 @@ function fmtScore(round, g, a) {
   }
   if (round === 'round1') { const v = round1Average(g); return v === null ? '—' : v.toFixed(1); }
   const r = round2Total(g); return r ? r.total : '—';
+}
+
+function headerScoreInner(round, g, a) {
+  if (round === 'screen') {
+    if (!a || !hasManualScore(g)) return '<span class="big">—</span><span class="of">/ 5 avg</span>';
+    const raw = screenAverage(g, a);
+    if (raw == null) return '<span class="big">—</span><span class="of">/ 5 avg</span>';
+    const std = standardizedScreenScore(a.id);
+    const z = screenZScore(a.id);
+    const zBit = z == null ? '' : ' · z ' + (z >= 0 ? '+' : '') + z.toFixed(1);
+    return '<span class="big">' + raw.toFixed(1) + '</span><span class="of">/ 5 raw</span>'
+      + '<span class="std-inline">' + std.toFixed(1) + ' std' + zBit + '</span>';
+  }
+  const of = round === 'round2' ? '/ 24' : '/ 4 avg';
+  return '<span class="big">' + fmtScore(round, g, a) + '</span><span class="of">' + of + '</span>';
 }
 
 function scoreSelector(round, applicantId, key, scale, onSet) {
@@ -2157,8 +2331,9 @@ function renderScreenGrade(a, g) {
 }
 
 function updateHeaderScore(round, g, a) {
-  const big = document.querySelector('.avg-display .big');
-  if (big) big.textContent = fmtScore(round, g, a || STATE.byId[STATE.currentApplicantId]);
+  const box = document.querySelector('.avg-display');
+  const person = a || STATE.byId[STATE.currentApplicantId];
+  if (box) box.innerHTML = headerScoreInner(round, g, person);
   refreshQueueBar(round);
 }
 
@@ -2568,11 +2743,14 @@ function csvEscape(v) {
 function buildCsv(round) {
   let header, rows;
   if (round === 'screen') {
-    header = ['Name (First Last)', 'Year', 'Late', 'Academics', 'Resume', 'Experience & Involvement', 'Leadership & Involvement', 'Application Essay Rating', 'Notes', 'Who is reviewing this application', 'Average', 'Attended Coffee Chats', 'Attended Info Session', 'Attended Meet the Members'];
+    header = ['Name (First Last)', 'Year', 'Late', 'Academics', 'Resume', 'Experience & Involvement', 'Leadership & Involvement', 'Application Essay Rating', 'Notes', 'Who is reviewing this application', 'Average', 'Standardized', 'Blend', 'Attended Coffee Chats', 'Attended Info Session', 'Attended Meet the Members'];
     rows = STATE.applicants.map(a => {
       const g = STATE.grades.screen[a.id] || { scores: {} };
       const grp = assignmentGroup('screen', a.id);
-      return [a.name, a.classYear, a.late ? 'Late' : '', effScore(a, g, 'academics') ?? '', g.scores.resume ?? '', g.scores.experience ?? '', g.scores.leadership ?? '', g.scores.essay ?? '', g.notes || '', grp ? grp.name : '', screenAverage(g, a) ?? '', a.attendance.coffeeChats.length ? 'Yes' : 'No', a.attendance.infoSession ? 'Yes' : 'No', a.attendance.meetMembers ? 'Yes' : 'No'];
+      const raw = screenAverage(g, a);
+      const std = hasManualScore(g) ? standardizedScreenScore(a.id) : null;
+      const blend = hasManualScore(g) ? screenBlendScore(a.id) : null;
+      return [a.name, a.classYear, a.late ? 'Late' : '', effScore(a, g, 'academics') ?? '', g.scores.resume ?? '', g.scores.experience ?? '', g.scores.leadership ?? '', g.scores.essay ?? '', g.notes || '', grp ? grp.name : '', raw ?? '', std == null ? '' : +std.toFixed(3), blend == null ? '' : +blend.toFixed(3), a.attendance.coffeeChats.length ? 'Yes' : 'No', a.attendance.infoSession ? 'Yes' : 'No', a.attendance.meetMembers ? 'Yes' : 'No'];
     });
   } else if (round === 'round1') {
     header = ['Candidate (First & Last) Name', 'Candidates School Email', 'Fit Q1', 'Fit Q2', 'Fit Q3', 'Personal Q1', 'Personal Q2', 'Personal Q3', 'Personality Q', 'Average Score', 'Recommendation', 'Notes'];
@@ -2594,6 +2772,66 @@ function buildCsv(round) {
   return { csv, filename };
 }
 
-// ---------------- Boot ----------------
-initCapabilities();
+// ---------------- Password gate ----------------
+// Static GitHub Pages — the password is in the JS on purpose. Split so a casual
+// View Source pass does not see the contiguous string.
+const GATE_STORE = 'rem_uf_gate_ok';
+const SITE_GATE = [
+  'RemFall',
+  '2026',
+].join('');
+
+function gateUnlocked() {
+  try { return sessionStorage.getItem(GATE_STORE) === '1'; } catch (e) { return false; }
+}
+
+function markGateUnlocked() {
+  try { sessionStorage.setItem(GATE_STORE, '1'); } catch (e) { /* private mode */ }
+  document.body.classList.add('unlocked');
+}
+
+function ensureGateDom() {
+  if (document.getElementById('gate')) return;
+  const el = document.createElement('div');
+  el.id = 'gate';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'gateTitle');
+  el.innerHTML = '<form id="gateForm" class="gate-card" autocomplete="off">'
+    + '<h1 id="gateTitle">REM UF Recruitment</h1>'
+    + '<p>Enter the recruitment password to open the dashboard.</p>'
+    + '<label class="sr-only" for="gatePassword">Password</label>'
+    + '<input type="password" id="gatePassword" name="password" autocomplete="current-password">'
+    + '<button type="submit" class="btn primary">Enter</button>'
+    + '<p id="gateErr" class="gate-err" hidden>Wrong password</p>'
+    + '</form>';
+  document.body.insertBefore(el, document.body.firstChild);
+}
+
+function bindGate() {
+  ensureGateDom();
+  const form = document.getElementById('gateForm');
+  const input = document.getElementById('gatePassword');
+  const err = document.getElementById('gateErr');
+  if (!form || !input) { markGateUnlocked(); initCapabilities(); return; }
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (input.value === SITE_GATE) {
+      markGateUnlocked();
+      if (err) err.hidden = true;
+      initCapabilities();
+    } else {
+      if (err) err.hidden = false;
+      input.select();
+    }
+  });
+  input.focus();
+}
+
+if (gateUnlocked()) {
+  markGateUnlocked();
+  initCapabilities();
+} else {
+  bindGate();
+}
 })();
