@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd1-individual-20260907';
+const BUILD_STAMP = 'rd1-score-note-save-20260908';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -259,13 +259,22 @@ function clearPendingOps() {
   try { localStorage.removeItem(PENDING_KEY); } catch (e) { /* ignore */ }
   try { sessionStorage.removeItem(PENDING_KEY); } catch (e) { /* ignore */ }
 }
+function cloneJson(value) {
+  if (value == null || typeof value !== 'object') return value;
+  try { return JSON.parse(JSON.stringify(value)); } catch (e) { return value; }
+}
+
 function applyPendingOps() {
   pendingOps().forEach(function (op) {
     try {
       if (op.kind === 'grade') {
         const rec = getGrade(op.round, op.id);
         if (op.field === 'score') rec.scores[op.key] = op.value === null ? undefined : op.value;
-        else rec[op.field] = op.value;
+        else if (op.field === 'qnotes' && op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
+          rec.qnotes = Object.assign({}, rec.qnotes, op.value);
+        } else {
+          rec[op.field] = op.value;
+        }
       } else if (op.kind === 'vouch') {
         STATE.vouches[op.id] = op.value;
       } else if (op.kind === 'assign') {
@@ -313,27 +322,33 @@ async function flushSave(urgent) {
   if (!urgent) {
     try { await loadState(); applyPendingOps(); } catch (e) { /* save what we have */ }
   }
-  // Chip-click saves snapshot an empty note; if the textarea still has text
-  // (debounce hasn't fired), fold it in so this PUT cannot drop it.
+  // Chip-click / score-click saves snapshot empty notes if debounce hasn't
+  // fired; fold live textareas in so this PUT cannot drop them.
   captureOpenVouchNote();
   captureOpenR1Fields();
-  const doc = currentStateDoc();
   // Only the ops this write actually covers are retired; an edit made while the
   // request was in flight stays pending for the next one.
   const covered = pendingOps().length;
+  let doc;
   try {
+    doc = currentStateDoc();
     const body = {
       message: 'score update ' + new Date(doc.updatedAt).toISOString(),
       content: b64EncodeUtf8(JSON.stringify(doc, null, 0)),
       branch: GH_BRANCH,
     };
     if (currentSha) body.sha = currentSha;
+    const payload = JSON.stringify(body);
+    // Chrome/Edge reject keepalive fetch when the body is over 64KB. Shared
+    // state.json is already near that after Application Screen scores; a First
+    // Round write would fail every time and stick the status on "retrying".
+    const keepalive = !!(urgent && payload.length < 60000);
     const res = await fetch(GH_API, {
       method: 'PUT',
       headers: ghHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(body),
+      body: payload,
       cache: 'no-store',
-      keepalive: true,
+      keepalive: keepalive,
     });
     if (res.status === 401 || res.status === 403) {
       const remaining = res.headers.get('x-ratelimit-remaining');
@@ -382,7 +397,8 @@ async function flushSave(urgent) {
 // Every write goes through these, so the op is stashed before the state changes.
 function saveGrade(round, applicantId, field, key, value) {
   if (round === 'screen') invalidateScreenStd();
-  recordOp({ kind: 'grade', round: round, id: applicantId, field: field, key: key, value: value === undefined ? null : value });
+  const stored = value === undefined ? null : cloneJson(value);
+  recordOp({ kind: 'grade', round: round, id: applicantId, field: field, key: key, value: stored });
   queueSave();
 }
 
@@ -489,6 +505,15 @@ function captureOpenR1Fields() {
   const time = document.getElementById('r1InterviewTime');
   if (notes) g.initialNotes = notes.value;
   if (time) g.interviewTime = time.value;
+  const main = document.getElementById('gradeMain');
+  if (!main) return;
+  main.querySelectorAll('textarea[data-notekey]').forEach(function (ta) {
+    if (ta.dataset.notekey === '__main') g.notes = ta.value;
+    else {
+      g.qnotes = g.qnotes || {};
+      g.qnotes[ta.dataset.notekey] = ta.value;
+    }
+  });
 }
 
 function flushAllPending() { flushSave(true); }
@@ -979,6 +1004,7 @@ function hasR1Meta(rec) {
   if (rec.interviewer || rec.interviewTime || rec.initialNotes) return true;
   if (rec.thankYou === true || rec.thankYou === false) return true;
   if (rec.knowFlag === true || rec.knowFlag === false) return true;
+  if (rec.qnotes && typeof rec.qnotes === 'object' && Object.keys(rec.qnotes).length) return true;
   return false;
 }
 
@@ -1813,6 +1839,8 @@ function restoreGradeScroll(snap) {
 
 let lastGradeKey = null;
 let lastOverviewView = false;
+let lastView = null;
+let lastRoundListScroll = 0;
 
 function render() {
   invalidateScreenStd();
@@ -1820,13 +1848,21 @@ function render() {
   const gradeSnap = sameGrade ? captureGradeScroll() : null;
   const sameOverview = STATE.view === 'overview' && lastOverviewView;
   const overviewSnap = sameOverview ? captureOverviewScroll() : null;
+  const sameRoundList = STATE.view === lastView && (STATE.view.indexOf('round:') === 0 || STATE.view === 'flagged');
+  const roundListSnap = sameRoundList && !sameGrade ? (pageScrollEl() ? pageScrollEl().scrollTop : lastRoundListScroll) : null;
   renderRail();
   renderTopbar();
   renderContent();
   lastGradeKey = gradeViewKey();
   lastOverviewView = STATE.view === 'overview';
+  lastView = STATE.view;
   if (gradeSnap) restoreGradeScroll(gradeSnap);
   if (overviewSnap) restoreOverviewScroll(overviewSnap);
+  if (roundListSnap != null) {
+    const main = pageScrollEl();
+    if (main) main.scrollTop = roundListSnap;
+    lastRoundListScroll = roundListSnap;
+  }
 }
 
 function railBtn(id, label, count) {
@@ -3398,15 +3434,19 @@ function bindScoreButtons(container, round, applicantId, afterSet) {
 
 function bindNotesFields(container, round, applicantId) {
   container.querySelectorAll('textarea[data-notekey]').forEach(ta => {
-    ta.addEventListener('input', () => {
+    function persist() {
       const g = getGrade(round, applicantId);
-      if (ta.dataset.notekey === '__main') { g.notes = ta.value; saveGrade(round, applicantId, 'notes', null, ta.value); }
-      else {
+      if (ta.dataset.notekey === '__main') {
+        g.notes = ta.value;
+        saveGrade(round, applicantId, 'notes', null, ta.value);
+      } else {
         g.qnotes = g.qnotes || {};
         g.qnotes[ta.dataset.notekey] = ta.value;
-        saveGrade(round, applicantId, 'qnotes', null, g.qnotes);
+        saveGrade(round, applicantId, 'qnotes', null, cloneJson(g.qnotes));
       }
-    });
+    }
+    ta.addEventListener('input', persist);
+    ta.addEventListener('blur', persist);
   });
 }
 
@@ -3515,10 +3555,25 @@ function screenDimsLine(a) {
   return bits.join(' · ');
 }
 
+function updateR1ScoreUI(container, g, key) {
+  container.querySelectorAll('.band-opt[data-key="' + key + '"]').forEach(function (opt) {
+    opt.classList.toggle('sel', g.scores[key] === Number(opt.dataset.val));
+  });
+  const sample = container.querySelector('.band-opt[data-key="' + key + '"]');
+  const card = sample && sample.closest('.dim-card');
+  const pill = card && card.querySelector('.score-pill');
+  if (pill) {
+    const v = g.scores[key];
+    pill.textContent = v || '—';
+    pill.classList.toggle('none', !v);
+  }
+}
+
 function renderRound1Grade(a, g) {
   const main = document.getElementById('gradeMain');
   const R = B.rubrics.round1;
   captureOpenR1Fields();
+  g = getGrade('round1', a.id);
   function qCard(q, key, displayIdx, groupLabel) {
     return `<div class="dim-card">
       <div class="dim-head"><h4>${groupLabel}${displayIdx != null ? ' · Q' + displayIdx : ''}</h4>${scoreFor2(g, key)}</div>
@@ -3585,29 +3640,47 @@ function renderRound1Grade(a, g) {
     </div>
   `;
   main.querySelectorAll('.band-opt').forEach(el => el.addEventListener('click', () => {
+    captureOpenR1Fields();
+    const rec = getGrade('round1', a.id);
     const key = el.dataset.key, val = Number(el.dataset.val);
     if (R1_HIDDEN_KEYS[key]) return;
-    g.scores[key] = g.scores[key] === val ? undefined : val;
-    saveGrade('round1', a.id, 'score', key, g.scores[key]);
-    renderRound1Grade(a, g); updateHeaderScore('round1', g);
+    rec.scores[key] = rec.scores[key] === val ? undefined : val;
+    if (rec.qnotes) saveGrade('round1', a.id, 'qnotes', null, cloneJson(rec.qnotes));
+    saveGrade('round1', a.id, 'score', key, rec.scores[key]);
+    updateR1ScoreUI(main, rec, key);
+    updateHeaderScore('round1', rec);
   }));
   main.querySelectorAll('[data-pidx]').forEach(el => el.addEventListener('click', () => {
-    g.__personalityIdx = Number(el.dataset.pidx); renderRound1Grade(a, g);
+    captureOpenR1Fields();
+    const rec = getGrade('round1', a.id);
+    rec.__personalityIdx = Number(el.dataset.pidx);
+    renderRound1Grade(a, rec);
   }));
   main.querySelectorAll('[data-rec]').forEach(el => el.addEventListener('click', () => {
-    g.recommendation = g.recommendation === el.dataset.rec ? undefined : el.dataset.rec;
-    saveGrade('round1', a.id, 'recommendation', null, g.recommendation); renderRound1Grade(a, g);
+    captureOpenR1Fields();
+    const rec = getGrade('round1', a.id);
+    rec.recommendation = rec.recommendation === el.dataset.rec ? undefined : el.dataset.rec;
+    saveGrade('round1', a.id, 'recommendation', null, rec.recommendation);
+    main.querySelectorAll('[data-rec]').forEach(function (chip) {
+      chip.classList.toggle('active', rec.recommendation === chip.dataset.rec);
+    });
   }));
   bindNotesFields(main, 'round1', a.id);
   const initNotes = document.getElementById('r1InitialNotes');
-  if (initNotes) initNotes.addEventListener('input', function () {
-    g.initialNotes = initNotes.value;
-    saveGrade('round1', a.id, 'initialNotes', null, initNotes.value);
-  });
+  if (initNotes) {
+    function persistInit() {
+      const rec = getGrade('round1', a.id);
+      rec.initialNotes = initNotes.value;
+      saveGrade('round1', a.id, 'initialNotes', null, initNotes.value);
+    }
+    initNotes.addEventListener('input', persistInit);
+    initNotes.addEventListener('blur', persistInit);
+  }
   const thank = document.getElementById('r1ThankYou');
   if (thank) thank.addEventListener('change', function () {
-    g.thankYou = thank.checked;
-    saveGrade('round1', a.id, 'thankYou', null, g.thankYou);
+    const rec = getGrade('round1', a.id);
+    rec.thankYou = thank.checked;
+    saveGrade('round1', a.id, 'thankYou', null, rec.thankYou);
   });
   const rd2 = document.getElementById('r1AdvanceRd2');
   if (rd2) rd2.addEventListener('change', function () {
