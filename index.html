@@ -609,7 +609,7 @@ window.BOOTSTRAP = {"meta":{"builtAt":"2026-09-05","applicantCount":248,"coffeeC
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd1-score-note-save-20260908';
+const BUILD_STAMP = 'rd1-personality-pick-20260909';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -758,9 +758,20 @@ async function pollForUpdates() {
 
 function adoptState(data) {
   if (!data || typeof data !== 'object') return;
+  const prevR1 = STATE.grades.round1;
   ROUNDS.forEach(function (r) {
     const g = (data.grades || {})[r];
     if (g && typeof g === 'object') STATE.grades[r] = g;
+  });
+  // Keep a live personality pick if the incoming record omitted it (older tab
+  // or a poll that landed before our write). Do not invent a record.
+  Object.keys(prevR1 || {}).forEach(function (id) {
+    const old = prevR1[id];
+    const incoming = STATE.grades.round1[id];
+    if (!old || !incoming) return;
+    if (old.personalityIdx == null || old.personalityIdx === '') return;
+    if (incoming.personalityIdx != null && incoming.personalityIdx !== '') return;
+    incoming.personalityIdx = old.personalityIdx;
   });
   if (data.vouches && typeof data.vouches === 'object') STATE.vouches = data.vouches;
   if (data.assignments && typeof data.assignments === 'object') {
@@ -878,6 +889,8 @@ function applyPendingOps() {
         if (op.field === 'score') rec.scores[op.key] = op.value === null ? undefined : op.value;
         else if (op.field === 'qnotes' && op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
           rec.qnotes = Object.assign({}, rec.qnotes, op.value);
+        } else if (op.field === 'personalityIdx' && (op.value === null || op.value === '') && rec.personalityIdx != null && rec.personalityIdx !== '') {
+          /* keep a live selection over an empty snapshot */
         } else {
           rec[op.field] = op.value;
         }
@@ -1120,6 +1133,11 @@ function captureOpenR1Fields() {
       g.qnotes[ta.dataset.notekey] = ta.value;
     }
   });
+  const activeP = main.querySelector('[data-pidx].active');
+  if (activeP) {
+    const idx = Number(activeP.dataset.pidx);
+    if (!isNaN(idx)) g.personalityIdx = idx;
+  }
 }
 
 function flushAllPending() { flushSave(true); }
@@ -1610,8 +1628,32 @@ function hasR1Meta(rec) {
   if (rec.interviewer || rec.interviewTime || rec.initialNotes) return true;
   if (rec.thankYou === true || rec.thankYou === false) return true;
   if (rec.knowFlag === true || rec.knowFlag === false) return true;
+  if (rec.personalityIdx != null && rec.personalityIdx !== '') return true;
   if (rec.qnotes && typeof rec.qnotes === 'object' && Object.keys(rec.qnotes).length) return true;
   return false;
+}
+
+function r1PersonalityList() {
+  return (B.rubrics.round1 && B.rubrics.round1.personality) || [];
+}
+
+// Restored from personalityIdx. If that was never saved, infer from a unique
+// personality0/1/2 score key. The shared scores.personality key does not say
+// which of the 3 prompts was asked, so it is not used to pick a chip.
+function r1PersonalityIdx(g) {
+  const qs = r1PersonalityList();
+  const raw = g && g.personalityIdx;
+  const stored = Number(raw);
+  if (raw != null && raw !== '' && !isNaN(stored) && stored >= 0 && stored < qs.length) return stored;
+  const scores = (g && g.scores) || {};
+  let found = null;
+  for (let i = 0; i < qs.length; i++) {
+    if (typeof scores['personality' + i] === 'number') {
+      if (found != null) return null;
+      found = i;
+    }
+  }
+  return found;
 }
 
 function hasR1InterviewScore(g) {
@@ -4175,6 +4217,46 @@ function updateR1ScoreUI(container, g, key) {
   }
 }
 
+function r1PersonalityPromptHtml(g) {
+  const qs = r1PersonalityList();
+  const idx = r1PersonalityIdx(g);
+  const q = idx != null ? qs[idx] : null;
+  if (!q) return '<div class="sub" style="color:var(--slate);">Pick which personality question you asked.</div>';
+  return `<div class="prompt" style="margin-top:8px;">${esc(q.q)}</div>
+          <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
+            ${['1', '2', '3', '4'].map(k => `<div class="band-opt ${g.scores.personality === Number(k) ? 'sel' : ''}" data-key="personality" data-val="${k}"><span class="sc">${k}</span>${esc(q.crit[k]?.text || '')}</div>`).join('')}
+          </div>`;
+}
+
+function bindR1BandOpts(root, a) {
+  root.querySelectorAll('.band-opt').forEach(function (el) {
+    el.addEventListener('click', function () {
+      captureOpenR1Fields();
+      const rec = getGrade('round1', a.id);
+      const key = el.dataset.key, val = Number(el.dataset.val);
+      if (R1_HIDDEN_KEYS[key]) return;
+      rec.scores[key] = rec.scores[key] === val ? undefined : val;
+      if (rec.qnotes) saveGrade('round1', a.id, 'qnotes', null, cloneJson(rec.qnotes));
+      saveGrade('round1', a.id, 'score', key, rec.scores[key]);
+      const main = document.getElementById('gradeMain') || root;
+      updateR1ScoreUI(main, rec, key);
+      updateHeaderScore('round1', rec);
+    });
+  });
+}
+
+function updateR1PersonalityUI(container, g, a) {
+  const idx = r1PersonalityIdx(g);
+  container.querySelectorAll('[data-pidx]').forEach(function (chip) {
+    chip.classList.toggle('active', Number(chip.dataset.pidx) === idx);
+  });
+  const host = container.querySelector('#r1PersonalityPrompt');
+  if (host) {
+    host.innerHTML = r1PersonalityPromptHtml(g);
+    if (a) bindR1BandOpts(host, a);
+  }
+}
+
 function renderRound1Grade(a, g) {
   const main = document.getElementById('gradeMain');
   const R = B.rubrics.round1;
@@ -4222,15 +4304,9 @@ function renderRound1Grade(a, g) {
       <div class="dim-head"><h4>Personality question — choose one</h4>${scoreFor2(g, 'personality')}</div>
       <div class="dim-body">
         <div class="case-select">
-          ${R.personality.map((q, i) => `<span class="chip ${g.__personalityIdx === i ? 'active' : ''}" data-pidx="${i}">${esc(truncate(q.q, 34))}</span>`).join('')}
+          ${R.personality.map((q, i) => `<span class="chip ${r1PersonalityIdx(g) === i ? 'active' : ''}" data-pidx="${i}">${esc(truncate(q.q, 34))}</span>`).join('')}
         </div>
-        ${g.__personalityIdx != null ? (() => {
-          const q = R.personality[g.__personalityIdx];
-          return `<div class="prompt" style="margin-top:8px;">${esc(q.q)}</div>
-          <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
-            ${['1', '2', '3', '4'].map(k => `<div class="band-opt ${g.scores.personality === Number(k) ? 'sel' : ''}" data-key="personality" data-val="${k}"><span class="sc">${k}</span>${esc(q.crit[k]?.text || '')}</div>`).join('')}
-          </div>`;
-        })() : '<div class="sub" style="color:var(--slate);">Pick which personality question you asked.</div>'}
+        <div id="r1PersonalityPrompt">${r1PersonalityPromptHtml(g)}</div>
         <div class="notes-field"><textarea data-notekey="personality" placeholder="Candidate's answer, notes…">${esc((g.qnotes && g.qnotes.personality) || '')}</textarea></div>
       </div>
     </div>
@@ -4245,22 +4321,15 @@ function renderRound1Grade(a, g) {
       <div class="notes-field"><textarea data-notekey="__main" placeholder="Anything else worth flagging…">${esc(g.notes || '')}</textarea></div>
     </div>
   `;
-  main.querySelectorAll('.band-opt').forEach(el => el.addEventListener('click', () => {
-    captureOpenR1Fields();
-    const rec = getGrade('round1', a.id);
-    const key = el.dataset.key, val = Number(el.dataset.val);
-    if (R1_HIDDEN_KEYS[key]) return;
-    rec.scores[key] = rec.scores[key] === val ? undefined : val;
-    if (rec.qnotes) saveGrade('round1', a.id, 'qnotes', null, cloneJson(rec.qnotes));
-    saveGrade('round1', a.id, 'score', key, rec.scores[key]);
-    updateR1ScoreUI(main, rec, key);
-    updateHeaderScore('round1', rec);
-  }));
+  bindR1BandOpts(main, a);
   main.querySelectorAll('[data-pidx]').forEach(el => el.addEventListener('click', () => {
     captureOpenR1Fields();
     const rec = getGrade('round1', a.id);
-    rec.__personalityIdx = Number(el.dataset.pidx);
-    renderRound1Grade(a, rec);
+    const idx = Number(el.dataset.pidx);
+    if (isNaN(idx)) return;
+    rec.personalityIdx = idx;
+    saveGrade('round1', a.id, 'personalityIdx', null, idx);
+    updateR1PersonalityUI(main, rec, a);
   }));
   main.querySelectorAll('[data-rec]').forEach(el => el.addEventListener('click', () => {
     captureOpenR1Fields();
