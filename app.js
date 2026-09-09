@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd1-personality-pick-20260909';
+const BUILD_STAMP = 'rd1-personality-hold-20260909';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -127,9 +127,13 @@ async function pollForUpdates() {
     if (res.status === 304) return;               // nothing changed
     if (res.status === 404) return;                 // still no file yet
     if (!res.ok) return;
+    // Re-check after the await: a personality chip click is not a focused
+    // input, so the start-of-poll pending/saving guard can miss it.
+    if (pendingOps().length || saving) return;
     // Don't consume this version while someone is mid-keystroke — adoptState
     // replaces STATE.vouches and would orphan the textarea's in-memory record.
-    if (isEditingField()) return;
+    // A just-set R1 personality pick is the same class: chips aren't inputs.
+    if (isEditingField() || shouldHoldPersonalityAgainstPoll()) return;
     lastEtag = res.headers.get('etag');
     const json = await res.json();
     if (json.sha === currentSha) return;
@@ -145,9 +149,70 @@ async function pollForUpdates() {
         applyLiveOverviewUpdate(advanceChanged, rd2Changed);
         return;
       }
+      if (STATE.view === 'grade' && STATE.gradeRound === 'round1') {
+        applyLiveR1GradeUpdate();
+        return;
+      }
       render();
     }
   } catch (e) { /* try again next tick */ }
+}
+
+function hasPersonalityIdxValue(v) {
+  return v != null && v !== '' && !isNaN(Number(v));
+}
+
+// Chip clicks are not focused inputs, so a poll that started before the click
+// can still adopt. Hold the pick until the PUT has had a chance to land.
+const personalityHolds = {};
+const PERSONALITY_HOLD_MS = 30000;
+
+function holdPersonalityPick(id, idx) {
+  if (!id || !hasPersonalityIdxValue(idx)) return;
+  personalityHolds[id] = { idx: Number(idx), until: Date.now() + PERSONALITY_HOLD_MS };
+}
+
+function heldPersonalityIdx(id) {
+  const h = id ? personalityHolds[id] : null;
+  if (!h || Date.now() > h.until) return null;
+  return h.idx;
+}
+
+function hasPendingPersonalityOp() {
+  return pendingOps().some(function (op) {
+    return op && op.kind === 'grade' && op.round === 'round1' && op.field === 'personalityIdx' && hasPersonalityIdxValue(op.value);
+  });
+}
+
+function shouldHoldPersonalityAgainstPoll() {
+  if (hasPendingPersonalityOp()) return true;
+  if (STATE.view === 'grade' && STATE.gradeRound === 'round1' && STATE.currentApplicantId) {
+    if (heldPersonalityIdx(STATE.currentApplicantId) != null) return true;
+  }
+  return false;
+}
+
+function keepLocalPersonalityIdx(prevR1) {
+  const ids = {};
+  Object.keys(prevR1 || {}).forEach(function (id) { ids[id] = true; });
+  Object.keys(personalityHolds).forEach(function (id) { ids[id] = true; });
+  if (STATE.currentApplicantId) ids[STATE.currentApplicantId] = true;
+  Object.keys(ids).forEach(function (id) {
+    const old = (prevR1 || {})[id];
+    const held = heldPersonalityIdx(id);
+    const localIdx = held != null ? held
+      : (old && hasPersonalityIdxValue(old.personalityIdx) ? Number(old.personalityIdx) : null);
+    if (localIdx == null) return;
+    let incoming = STATE.grades.round1[id];
+    if (!incoming) {
+      incoming = old ? old : { scores: {}, notes: '' };
+      STATE.grades.round1[id] = incoming;
+    }
+    // Remote undefined must never wipe a local 0/1/2. A live hold wins even
+    // if the incoming record already has a different idx (stale poll).
+    if (held != null) incoming.personalityIdx = held;
+    else if (!hasPersonalityIdxValue(incoming.personalityIdx)) incoming.personalityIdx = localIdx;
+  });
 }
 
 function adoptState(data) {
@@ -157,16 +222,9 @@ function adoptState(data) {
     const g = (data.grades || {})[r];
     if (g && typeof g === 'object') STATE.grades[r] = g;
   });
-  // Keep a live personality pick if the incoming record omitted it (older tab
-  // or a poll that landed before our write). Do not invent a record.
-  Object.keys(prevR1 || {}).forEach(function (id) {
-    const old = prevR1[id];
-    const incoming = STATE.grades.round1[id];
-    if (!old || !incoming) return;
-    if (old.personalityIdx == null || old.personalityIdx === '') return;
-    if (incoming.personalityIdx != null && incoming.personalityIdx !== '') return;
-    incoming.personalityIdx = old.personalityIdx;
-  });
+  // In-memory / pending personality pick wins until flushed. Remote omission
+  // (poll before PUT, older tab) must not unselect the chip.
+  keepLocalPersonalityIdx(prevR1);
   if (data.vouches && typeof data.vouches === 'object') STATE.vouches = data.vouches;
   if (data.assignments && typeof data.assignments === 'object') {
     STATE.assignments = Object.assign({ screen: {}, round1: {}, round2: {} }, data.assignments);
@@ -178,6 +236,8 @@ function adoptState(data) {
     STATE.interviewers = normalizeInterviewers(data.interviewers);
   }
   liveVersion = data.updatedAt || null;
+  // Fold unsent local edits on top so a poll cannot drop a just-clicked idx.
+  applyPendingOps();
 }
 
 function currentStateDoc() {
@@ -283,8 +343,13 @@ function applyPendingOps() {
         if (op.field === 'score') rec.scores[op.key] = op.value === null ? undefined : op.value;
         else if (op.field === 'qnotes' && op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
           rec.qnotes = Object.assign({}, rec.qnotes, op.value);
-        } else if (op.field === 'personalityIdx' && (op.value === null || op.value === '') && rec.personalityIdx != null && rec.personalityIdx !== '') {
-          /* keep a live selection over an empty snapshot */
+        } else if (op.field === 'personalityIdx') {
+          if (hasPersonalityIdxValue(op.value)) rec.personalityIdx = Number(op.value);
+          else if (hasPersonalityIdxValue(rec.personalityIdx)) {
+            /* keep a live 0/1/2 over an empty snapshot — never write undefined over 0 */
+          } else {
+            rec.personalityIdx = op.value;
+          }
         } else {
           rec[op.field] = op.value;
         }
@@ -410,7 +475,11 @@ async function flushSave(urgent) {
 // Every write goes through these, so the op is stashed before the state changes.
 function saveGrade(round, applicantId, field, key, value) {
   if (round === 'screen') invalidateScreenStd();
-  const stored = value === undefined ? null : cloneJson(value);
+  let stored = value === undefined ? null : cloneJson(value);
+  if (field === 'personalityIdx') {
+    stored = hasPersonalityIdxValue(value) ? Number(value) : stored;
+    if (hasPersonalityIdxValue(stored)) holdPersonalityPick(applicantId, stored);
+  }
   recordOp({ kind: 'grade', round: round, id: applicantId, field: field, key: key, value: stored });
   queueSave();
 }
@@ -527,11 +596,14 @@ function captureOpenR1Fields() {
       g.qnotes[ta.dataset.notekey] = ta.value;
     }
   });
-  const activeP = main.querySelector('[data-pidx].active');
+  const activeP = main.querySelector('.chip[data-pidx].active');
   if (activeP) {
     const idx = Number(activeP.dataset.pidx);
     if (!isNaN(idx)) g.personalityIdx = idx;
   }
+  const held = heldPersonalityIdx(STATE.currentApplicantId);
+  if (held != null) g.personalityIdx = held;
+  // Never snapshot undefined over a live 0/1/2 (empty chip row during remount).
 }
 
 function flushAllPending() { flushSave(true); }
@@ -1034,11 +1106,12 @@ function r1PersonalityList() {
 // Restored from personalityIdx. If that was never saved, infer from a unique
 // personality0/1/2 score key. The shared scores.personality key does not say
 // which of the 3 prompts was asked, so it is not used to pick a chip.
+// Infer only when personalityIdx is missing — never override an explicit 0/1/2.
 function r1PersonalityIdx(g) {
   const qs = r1PersonalityList();
   const raw = g && g.personalityIdx;
   const stored = Number(raw);
-  if (raw != null && raw !== '' && !isNaN(stored) && stored >= 0 && stored < qs.length) return stored;
+  if (hasPersonalityIdxValue(raw) && !isNaN(stored) && stored >= 0 && stored < qs.length) return stored;
   const scores = (g && g.scores) || {};
   let found = null;
   for (let i = 0; i < qs.length; i++) {
@@ -2827,10 +2900,15 @@ function syncAdvanceRd2CheckboxesFromState() {
   refreshAdvanceRd2Ui();
 }
 
-function applyLiveOverviewUpdate(advanceChanged, rd2Changed) {
-  if (advanceChanged) syncAdvanceCheckboxesFromState();
-  if (rd2Changed) syncAdvanceRd2CheckboxesFromState();
+function applyLiveR1GradeUpdate() {
   setSaveStatus(STATE.saveStatus);
+  const a = STATE.byId[STATE.currentApplicantId];
+  const main = document.getElementById('gradeMain');
+  if (!a || !main) return;
+  const g = getGrade('round1', a.id);
+  updateR1PersonalityUI(main, g, a);
+  R1_SCORE_KEYS.forEach(function (key) { updateR1ScoreUI(main, g, key); });
+  updateHeaderScore('round1', g, a);
 }
 
 function pollShouldRemountOverview(advanceChanged) {
@@ -3641,14 +3719,20 @@ function bindR1BandOpts(root, a) {
 
 function updateR1PersonalityUI(container, g, a) {
   const idx = r1PersonalityIdx(g);
-  container.querySelectorAll('[data-pidx]').forEach(function (chip) {
+  container.querySelectorAll('.chip[data-pidx]').forEach(function (chip) {
     chip.classList.toggle('active', Number(chip.dataset.pidx) === idx);
   });
   const host = container.querySelector('#r1PersonalityPrompt');
-  if (host) {
-    host.innerHTML = r1PersonalityPromptHtml(g);
-    if (a) bindR1BandOpts(host, a);
+  if (!host) return;
+  const next = idx == null ? '' : String(idx);
+  const prev = host.getAttribute('data-shown-pidx');
+  if (prev === next && host.querySelector('.band-opt, .sub')) {
+    updateR1ScoreUI(container, g, 'personality');
+    return;
   }
+  host.setAttribute('data-shown-pidx', next);
+  host.innerHTML = r1PersonalityPromptHtml(g);
+  if (a) bindR1BandOpts(host, a);
 }
 
 function renderRound1Grade(a, g) {
@@ -3700,7 +3784,7 @@ function renderRound1Grade(a, g) {
         <div class="case-select">
           ${R.personality.map((q, i) => `<span class="chip ${r1PersonalityIdx(g) === i ? 'active' : ''}" data-pidx="${i}">${esc(truncate(q.q, 34))}</span>`).join('')}
         </div>
-        <div id="r1PersonalityPrompt">${r1PersonalityPromptHtml(g)}</div>
+        <div id="r1PersonalityPrompt" data-shown-pidx="${r1PersonalityIdx(g) == null ? '' : r1PersonalityIdx(g)}">${r1PersonalityPromptHtml(g)}</div>
         <div class="notes-field"><textarea data-notekey="personality" placeholder="Candidate's answer, notes…">${esc((g.qnotes && g.qnotes.personality) || '')}</textarea></div>
       </div>
     </div>
@@ -3716,15 +3800,18 @@ function renderRound1Grade(a, g) {
     </div>
   `;
   bindR1BandOpts(main, a);
-  main.querySelectorAll('[data-pidx]').forEach(el => el.addEventListener('click', () => {
-    captureOpenR1Fields();
-    const rec = getGrade('round1', a.id);
-    const idx = Number(el.dataset.pidx);
-    if (isNaN(idx)) return;
-    rec.personalityIdx = idx;
-    saveGrade('round1', a.id, 'personalityIdx', null, idx);
-    updateR1PersonalityUI(main, rec, a);
-  }));
+  main.querySelectorAll('.chip[data-pidx]').forEach(function (el) {
+    el.addEventListener('click', function (evt) {
+      if (evt) evt.stopPropagation();
+      const rec = getGrade('round1', a.id);
+      const idx = Number(el.dataset.pidx);
+      if (isNaN(idx)) return;
+      rec.personalityIdx = idx;
+      holdPersonalityPick(a.id, idx);
+      saveGrade('round1', a.id, 'personalityIdx', null, idx);
+      updateR1PersonalityUI(main, rec, a);
+    });
+  });
   main.querySelectorAll('[data-rec]').forEach(el => el.addEventListener('click', () => {
     captureOpenR1Fields();
     const rec = getGrade('round1', a.id);
