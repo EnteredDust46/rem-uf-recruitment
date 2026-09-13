@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd1-interviewer-std-20260913';
+const BUILD_STAMP = 'rd1-advancing-rd2-score-20260913';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -34,6 +34,7 @@ const STATE = {
   incompleteOnly: false,
   flaggedOnly: false,
   knowFlagOnly: false,
+  filterAdvanceRd2: 'all',
   returnView: null,
   queueTrail: [],
   queueDone: false,
@@ -1517,6 +1518,12 @@ function hasExplicitAdvanceRd2() {
   return !!(STATE.advanceRd2 && STATE.advanceRd2.applied);
 }
 
+// Only people checked on Overview / profile after an explicit Rd2 set is applied.
+// The implicit "everyone in First Round" pool does not count as advancing.
+function isExplicitlyAdvancingRd2(id) {
+  return !!(STATE.advanceRd2 && STATE.advanceRd2.applied && STATE.advanceRd2.ids[id] === true);
+}
+
 function isAdvanceRd2Checked(id) {
   if (hasExplicitAdvanceRd2()) return STATE.advanceRd2.ids[id] === true;
   return true;
@@ -1754,6 +1761,9 @@ function sortApplicantList(list, round) {
   return list.slice().sort((a, b) => {
     let av, bv;
     if (STATE.sortKey === 'name') { av = a.name; bv = b.name; }
+    else if (STATE.sortKey === 'r1score' || (round === 'round2' && STATE.sortKey === 'gpa')) {
+      av = scoreFor('round1', a.id) ?? -1; bv = scoreFor('round1', b.id) ?? -1;
+    }
     else if (STATE.sortKey === 'gpa') { av = autoFor(a).gpa.value ?? -1; bv = autoFor(b).gpa.value ?? -1; }
     else if (STATE.sortKey === 'score') {
       if (round === 'screen') { av = screenBlendScore(a.id) ?? -1; bv = screenBlendScore(b.id) ?? -1; }
@@ -3124,6 +3134,11 @@ function filteredRoundPool(round) {
         return !!(g && g.knowFlag);
       });
     }
+    if (STATE.filterAdvanceRd2 === 'advancing') {
+      list = list.filter(function (a) { return isExplicitlyAdvancingRd2(a.id); });
+    } else if (STATE.filterAdvanceRd2 === 'not') {
+      list = list.filter(function (a) { return !isExplicitlyAdvancingRd2(a.id); });
+    }
   } else {
     if (STATE.filterGroup !== 'all') list = list.filter(a => ensureAssignment(round, a.id) === STATE.filterGroup);
     if (STATE.incompleteOnly && STATE.filterGroup !== 'all') {
@@ -3168,7 +3183,10 @@ function flaggedListRowsHtml(list) {
 }
 
 function listCountLabel(round, list) {
-  return STATE.incompleteOnly ? list.length + ' unreviewed' : list.length + ' shown';
+  if (STATE.incompleteOnly) return list.length + ' unreviewed';
+  if (round === 'round1' && STATE.filterAdvanceRd2 === 'advancing') return list.length + ' advancing';
+  if (round === 'round1' && STATE.filterAdvanceRd2 === 'not') return list.length + ' not advancing';
+  return list.length + ' shown';
 }
 
 function bindApplicantRowClicks(onOpen) {
@@ -3203,6 +3221,15 @@ function refreshRoundListRows(round) {
   tbody.innerHTML = roundListRowsHtml(round, list);
   if (countEl) countEl.textContent = listCountLabel(round, list);
   bindApplicantRowClicks(function (tr) { openRoundApplicant(round, tr); });
+}
+
+function applyAdvanceRd2ListFilter(round, mode) {
+  STATE.filterAdvanceRd2 = STATE.filterAdvanceRd2 === mode ? 'all' : mode;
+  const adv = document.getElementById('advancingRd2Toggle');
+  const notAdv = document.getElementById('notAdvancingRd2Toggle');
+  if (adv) adv.classList.toggle('active', STATE.filterAdvanceRd2 === 'advancing');
+  if (notAdv) notAdv.classList.toggle('active', STATE.filterAdvanceRd2 === 'not');
+  refreshRoundListRows(round);
 }
 
 function refreshFlaggedListRows() {
@@ -3241,7 +3268,9 @@ function renderRoundList(round) {
           <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}">R1 avg</th>
           <th data-sort="r1std" class="${STATE.sortKey === 'r1std' ? 'sorted' : ''}" title="Interviewer-adjusted First Round score">Std</th>`
     : `<th data-sort="name" class="${STATE.sortKey === 'name' ? 'sorted' : ''}">Applicant</th>
-          <th data-sort="gpa" class="${STATE.sortKey === 'gpa' ? 'sorted' : ''}">GPA</th>
+          ${round === 'round2'
+            ? `<th data-sort="r1score" class="${STATE.sortKey === 'r1score' || STATE.sortKey === 'gpa' ? 'sorted' : ''}" title="First Round average and interviewer-standardized score">R1 avg</th>`
+            : `<th data-sort="gpa" class="${STATE.sortKey === 'gpa' ? 'sorted' : ''}">GPA</th>`}
           <th>Position</th>
           <th>Attendance</th>
           <th data-sort="group" class="${STATE.sortKey === 'group' ? 'sorted' : ''}">Reviewer group</th>
@@ -3257,6 +3286,8 @@ function renderRoundList(round) {
       </select>
       ${r1 ? `<label class="chip ${STATE.screenedOnly ? 'active' : ''}" id="advToggle">Screened only</label>` : ''}
       ${r1 ? `<label class="chip ${STATE.knowFlagOnly ? 'active' : ''}" id="knowFlagToggle">Needs reassign</label>` : ''}
+      ${r1 ? `<label class="chip ${STATE.filterAdvanceRd2 === 'advancing' ? 'active' : ''}" id="advancingRd2Toggle">Advancing</label>` : ''}
+      ${r1 ? `<label class="chip ${STATE.filterAdvanceRd2 === 'not' ? 'active' : ''}" id="notAdvancingRd2Toggle">Not advancing</label>` : ''}
       <label class="chip ${STATE.flaggedOnly ? 'active' : ''}" id="flaggedToggle">Flagged</label>
       <label class="chip ${STATE.incompleteOnly ? 'active' : ''}" id="incompleteToggle">Unreviewed only</label>
       ${reviewAsChipsHtml(round)}
@@ -3286,6 +3317,10 @@ function renderRoundList(round) {
   if (advToggle) advToggle.addEventListener('click', () => { STATE.screenedOnly = !STATE.screenedOnly; renderRoundList(round); });
   const knowToggle = document.getElementById('knowFlagToggle');
   if (knowToggle) knowToggle.addEventListener('click', () => { STATE.knowFlagOnly = !STATE.knowFlagOnly; renderRoundList(round); });
+  const advancingToggle = document.getElementById('advancingRd2Toggle');
+  if (advancingToggle) advancingToggle.addEventListener('click', () => { applyAdvanceRd2ListFilter(round, 'advancing'); });
+  const notAdvancingToggle = document.getElementById('notAdvancingRd2Toggle');
+  if (notAdvancingToggle) notAdvancingToggle.addEventListener('click', () => { applyAdvanceRd2ListFilter(round, 'not'); });
   const flaggedToggle = document.getElementById('flaggedToggle');
   if (flaggedToggle) flaggedToggle.addEventListener('click', () => { STATE.flaggedOnly = !STATE.flaggedOnly; renderRoundList(round); });
   const incompleteToggle = document.getElementById('incompleteToggle');
@@ -3337,6 +3372,11 @@ function renderFlaggedList() {
 }
 
 function emptyRoundMessage(round) {
+  if (round === 'round1' && STATE.filterAdvanceRd2 === 'advancing') {
+    return hasExplicitAdvanceRd2()
+      ? 'No one matching these filters is checked to advance to Round 2.'
+      : 'No one is checked to advance to Round 2 yet — pick people on Overview → Who advances to Round 2.';
+  }
   if (STATE.flaggedOnly && !STATE.search && STATE.filterYear === 'all') {
     return 'No one is flagged for a second reviewer.';
   }
@@ -3386,9 +3426,12 @@ function renderRow(round, a) {
     </tr>`;
   }
   const grp = assignmentGroup(round, a.id);
+  const priorCol = round === 'round2'
+    ? `<td><span class="score-pill pair">${formatRound1ScorePairHtml(a.id)}</span></td>`
+    : `<td>${gpaCell(a)}</td>`;
   return `<tr class="clickable" role="button" tabindex="0" data-id="${a.id}">
     <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${flagBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
-    <td>${gpaCell(a)}</td>
+    ${priorCol}
     <td>${esc(truncate(a.position, 28))}</td>
     <td>${attendanceIcons(a)}</td>
     <td>${grp ? esc(grp.name) : '—'}</td>
@@ -3461,6 +3504,7 @@ function renderGrade() {
 
   const assignBlock = round === 'round1' ? r1AssignBlockHtml(a, g) : `
         <div class="avg-display">${headerScoreInner(round, g, a)}</div>
+        ${round === 'round2' ? `<div class="r1-app-score" title="First Round interview average">${formatRound1ScorePairHtml(a.id)} <span class="of">first round</span></div>` : ''}
         <div class="field-label assign-label">Assigned review group</div>
         <select id="groupPicker" title="Who is reviewing this application">
           ${STATE.groups.map(gr => `<option value="${gr.id}" ${ensureAssignment(round, a.id) === gr.id ? 'selected' : ''}>${esc(gr.name)}</option>`).join('')}
@@ -3481,7 +3525,7 @@ function renderGrade() {
           <span>🎓 ${esc(a.university)}</span>
           <span>${esc(a.classYear)} · Class of ${esc(a.gradYear)}</span>
           <span>${esc(a.major)}</span>
-          <span>GPA ${esc(a.gpa)}</span>
+          <span>${round === 'round2' ? 'R1 ' + formatRound1ScorePairHtml(a.id) : 'GPA ' + esc(a.gpa)}</span>
           ${extUrl(a.linkedin) ? `<span><a href="${esc(extUrl(a.linkedin))}" target="_blank" rel="noopener">LinkedIn ↗</a></span>` : '<span class="muted-note">No LinkedIn</span>'}
           ${extUrl(a.resume) ? `<span><a href="${esc(extUrl(a.resume))}" target="_blank" rel="noopener">Resume ↗</a></span>` : ''}
         </div>
