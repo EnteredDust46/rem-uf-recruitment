@@ -533,6 +533,7 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 .advance-row .nm { font-weight: 600; }
 .advance-row .sub { font-size: 11.5px; color: var(--slate); }
 .advance-row .mono { text-align: right; font-size: 12px; }
+.rd2-list-email-tools { margin: -4px 0 12px; }
 .advance-emails { margin: 0 0 10px; }
 .advance-emails textarea {
   width: 100%; height: 110px; font-family: var(--font-mono), ui-monospace, Menlo, monospace;

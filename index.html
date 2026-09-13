@@ -543,6 +543,7 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 .advance-row .nm { font-weight: 600; }
 .advance-row .sub { font-size: 11.5px; color: var(--slate); }
 .advance-row .mono { text-align: right; font-size: 12px; }
+.rd2-list-email-tools { margin: -4px 0 12px; }
 .advance-emails { margin: 0 0 10px; }
 .advance-emails textarea {
   width: 100%; height: 110px; font-family: var(--font-mono), ui-monospace, Menlo, monospace;
@@ -609,7 +610,7 @@ window.BOOTSTRAP = {"meta": {"builtAt": "2026-09-05", "applicantCount": 248, "co
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd1-advancing-rd2-score-20260913';
+const BUILD_STAMP = 'rd2-copy-emails-20260913';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -2998,14 +2999,11 @@ function renderAdvanceRd2Card() {
       <input type="number" id="advanceRd2TopN" min="0" step="1" value="${topN}">
       <button type="button" class="btn primary small" id="applyRd2TopN">Apply top N</button>
       ${applied ? '<button type="button" class="btn ghost small" id="clearAdvanceRd2">Use First Round pool again</button>' : ''}
-      <button type="button" class="btn small" id="copyAdvanceRd2Emails">Copy emails</button>
-      <button type="button" class="btn ghost small" id="showAdvanceRd2Emails">Show emails</button>
+      ${rd2EmailToolButtonsHtml()}
       <span class="advance-count" id="advanceRd2Count">${esc(advanceRd2CountLabel())}</span>
     </div>
     <div class="advance-status" id="advanceRd2Status">${applied ? 'Round 2 is the checked list below.' : 'Round 2 still includes everyone in First Round — Apply top N to set the pool.'}</div>
-    <div id="advanceRd2EmailPanel" class="advance-emails" hidden>
-      <textarea id="advanceRd2EmailOut" readonly></textarea>
-    </div>
+    ${rd2EmailPanelsHtml()}
     <div class="advance-list" id="advanceRd2List">${rows}</div>
   </div>`;
 }
@@ -3020,10 +3018,7 @@ function bindAdvanceRd2Card() {
     toast('Round 2 set to top ' + Math.max(0, Math.floor(Number(n) || 0)) + ' by blended First Round score');
   });
   bindClearAdvanceRd2Button(document.getElementById('clearAdvanceRd2'));
-  const copyBtn = document.getElementById('copyAdvanceRd2Emails');
-  if (copyBtn) copyBtn.addEventListener('click', function () { copyAdvanceRd2Emails(); });
-  const showBtn = document.getElementById('showAdvanceRd2Emails');
-  if (showBtn) showBtn.addEventListener('click', function () { toggleAdvanceRd2Emails(); });
+  bindRd2EmailTools();
   contentEl.querySelectorAll('[data-advance-rd2]').forEach(function (box) {
     box.addEventListener('change', function (e) {
       e.stopPropagation();
@@ -3041,7 +3036,8 @@ function advanceRd2CountLabel() {
   const poolN = poolForRound('round2').length;
   const applied = hasExplicitAdvanceRd2();
   const emailN = selectedAdvanceRd2Emails().length;
-  return selected + ' selected · N = ' + topN + (applied ? ' · ' + poolN + ' in Round 2' : '') + ' · ' + emailN + ' emails';
+  const rejectN = selectedRejectRd2Emails().length;
+  return selected + ' selected · N = ' + topN + (applied ? ' · ' + poolN + ' in Round 2' : '') + ' · ' + emailN + ' emails' + (applied ? ' · ' + rejectN + ' rejection emails' : '');
 }
 
 function bindClearAdvanceRd2Button(btn) {
@@ -3089,15 +3085,74 @@ function refreshAdvanceRd2Ui() {
   const emailOut = document.getElementById('advanceRd2EmailOut');
   const emailPanel = document.getElementById('advanceRd2EmailPanel');
   if (emailOut && emailPanel && !emailPanel.hidden) {
-    emailOut.value = advanceRd2EmailText('\n');
+    emailOut.value = advanceRd2ShowText();
   }
+  syncAdvanceRd2EmailControls();
+  syncRejectRd2EmailControls();
+}
+
+function rd2RejectTitle() {
+  return hasExplicitAdvanceRd2()
+    ? 'People in First Round who did not move to Round 2'
+    : 'Everyone is still in the First Round pool';
+}
+
+function rd2MoveCopyEnabled() {
+  return hasExplicitAdvanceRd2() || STATE.view === 'round:round2';
+}
+
+function rd2MoveTitle(kind) {
+  if (!rd2MoveCopyEnabled()) return 'No Round 2 set yet — Apply top N on Overview';
+  return kind === 'show'
+    ? 'Name and email of people advancing to Round 2'
+    : 'Emails of people advancing to Round 2';
+}
+
+function rd2EmailToolButtonsHtml() {
+  const applied = hasExplicitAdvanceRd2();
+  const moveOn = rd2MoveCopyEnabled();
+  const rejectTitle = rd2RejectTitle();
+  return `<button type="button" class="btn small" id="copyAdvanceRd2Emails"${moveOn ? '' : ' disabled'} title="${esc(rd2MoveTitle('copy'))}">Copy emails</button>
+      <button type="button" class="btn ghost small" id="showAdvanceRd2Emails"${moveOn ? '' : ' disabled'} title="${esc(rd2MoveTitle('show'))}">Show emails</button>
+      <button type="button" class="btn small" id="copyRejectRd2Emails"${applied ? '' : ' disabled'} title="${esc(rejectTitle)}">Copy rejection emails</button>
+      <button type="button" class="btn ghost small" id="showRejectRd2Emails"${applied ? '' : ' disabled'} title="${esc(rejectTitle)}">Show rejection emails</button>`;
+}
+
+function rd2EmailPanelsHtml() {
+  return `<div id="advanceRd2EmailPanel" class="advance-emails" hidden>
+      <textarea id="advanceRd2EmailOut" readonly></textarea>
+    </div>
+    <div id="rejectRd2EmailPanel" class="advance-emails" hidden>
+      <textarea id="rejectRd2EmailOut" readonly></textarea>
+    </div>`;
+}
+
+function rd2ListEmailToolsHtml() {
+  return `<div class="advance-controls rd2-list-email-tools">
+      ${rd2EmailToolButtonsHtml()}
+    </div>
+    ${rd2EmailPanelsHtml()}`;
+}
+
+function bindRd2EmailTools() {
+  const copyBtn = document.getElementById('copyAdvanceRd2Emails');
+  if (copyBtn) copyBtn.addEventListener('click', function () { copyAdvanceRd2Emails(); });
+  const showBtn = document.getElementById('showAdvanceRd2Emails');
+  if (showBtn) showBtn.addEventListener('click', function () { toggleAdvanceRd2Emails(); });
+  const copyRejectBtn = document.getElementById('copyRejectRd2Emails');
+  if (copyRejectBtn) copyRejectBtn.addEventListener('click', function () { copyRejectRd2Emails(); });
+  const showRejectBtn = document.getElementById('showRejectRd2Emails');
+  if (showRejectBtn) showRejectBtn.addEventListener('click', function () { toggleRejectRd2Emails(); });
+  syncAdvanceRd2EmailControls();
+  syncRejectRd2EmailControls();
 }
 
 function selectedAdvanceRd2Applicants() {
   if (hasExplicitAdvanceRd2()) {
     return firstRoundPool().filter(function (a) { return STATE.advanceRd2.ids[a.id] === true; });
   }
-  return firstRoundPool();
+  if (STATE.view === 'round:round2') return firstRoundPool();
+  return [];
 }
 
 function selectedAdvanceRd2Emails() {
@@ -3106,11 +3161,80 @@ function selectedAdvanceRd2Emails() {
   }).filter(Boolean);
 }
 
+function applicantNameEmailLine(a) {
+  const name = String((a && a.name) || '').trim() || '(no name)';
+  const email = String((a && a.email) || '').trim() || '(no email)';
+  return name + ' — ' + email;
+}
+
 function advanceRd2EmailText(sep) {
   return selectedAdvanceRd2Emails().join(sep == null ? '\n' : sep);
 }
 
+function advanceRd2ShowText() {
+  return selectedAdvanceRd2Applicants().map(applicantNameEmailLine).join('\n');
+}
+
+function selectedRejectRd2Applicants() {
+  if (!hasExplicitAdvanceRd2()) return [];
+  return firstRoundPool().filter(function (a) { return STATE.advanceRd2.ids[a.id] !== true; });
+}
+
+function selectedRejectRd2Emails() {
+  return selectedRejectRd2Applicants().map(function (a) {
+    return String(a.email || '').trim();
+  }).filter(Boolean);
+}
+
+function rejectRd2EmailText(sep) {
+  return selectedRejectRd2Emails().join(sep == null ? '\n' : sep);
+}
+
+function rejectRd2ShowText() {
+  return selectedRejectRd2Applicants().map(applicantNameEmailLine).join('\n');
+}
+
+function syncAdvanceRd2EmailControls() {
+  const on = rd2MoveCopyEnabled();
+  [['copyAdvanceRd2Emails', 'copy'], ['showAdvanceRd2Emails', 'show']].forEach(function (pair) {
+    const el = document.getElementById(pair[0]);
+    if (!el) return;
+    el.disabled = !on;
+    el.title = rd2MoveTitle(pair[1]);
+  });
+  const panel = document.getElementById('advanceRd2EmailPanel');
+  const out = document.getElementById('advanceRd2EmailOut');
+  const btn = document.getElementById('showAdvanceRd2Emails');
+  if (!on && panel && !panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.textContent = 'Show emails';
+  } else if (out && panel && !panel.hidden) {
+    out.value = advanceRd2ShowText();
+  }
+}
+
+function syncRejectRd2EmailControls() {
+  const applied = hasExplicitAdvanceRd2();
+  const title = rd2RejectTitle();
+  ['copyRejectRd2Emails', 'showRejectRd2Emails'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = !applied;
+    el.title = title;
+  });
+  const panel = document.getElementById('rejectRd2EmailPanel');
+  const out = document.getElementById('rejectRd2EmailOut');
+  const btn = document.getElementById('showRejectRd2Emails');
+  if (!applied && panel && !panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.textContent = 'Show rejection emails';
+  } else if (out && panel && !panel.hidden) {
+    out.value = rejectRd2ShowText();
+  }
+}
+
 async function copyAdvanceRd2Emails() {
+  if (!rd2MoveCopyEnabled()) { toast('No one is checked to advance to Round 2 yet'); return; }
   const text = advanceRd2EmailText(', ');
   if (!text) { toast('No emails on the current Round 2 set'); return; }
   let ok = false;
@@ -3135,6 +3259,7 @@ async function copyAdvanceRd2Emails() {
 }
 
 function toggleAdvanceRd2Emails() {
+  if (!rd2MoveCopyEnabled()) { toast('No one is checked to advance to Round 2 yet'); return; }
   const panel = document.getElementById('advanceRd2EmailPanel');
   const out = document.getElementById('advanceRd2EmailOut');
   const btn = document.getElementById('showAdvanceRd2Emails');
@@ -3144,9 +3269,56 @@ function toggleAdvanceRd2Emails() {
     if (btn) btn.textContent = 'Show emails';
     return;
   }
-  out.value = advanceRd2EmailText('\n');
+  const text = advanceRd2ShowText();
+  if (!text) { toast('No one on the current Round 2 set'); return; }
+  out.value = text;
   panel.hidden = false;
   if (btn) btn.textContent = 'Hide emails';
+  out.focus();
+  out.select();
+}
+
+async function copyRejectRd2Emails() {
+  if (!hasExplicitAdvanceRd2()) { toast('Everyone is still in the First Round pool.'); return; }
+  const text = rejectRd2EmailText(', ');
+  if (!text) { toast('No emails on the rejection set'); return; }
+  let ok = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (e) { /* fall through */ }
+  if (!ok) {
+    const panel = document.getElementById('rejectRd2EmailPanel');
+    const out = document.getElementById('rejectRd2EmailOut');
+    if (panel && out) {
+      panel.hidden = false;
+      out.value = text;
+      out.focus();
+      out.select();
+      try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+    }
+  }
+  toast(ok ? 'Copied ' + selectedRejectRd2Emails().length + ' rejection emails' : 'Could not copy — use Show rejection emails and copy from there');
+}
+
+function toggleRejectRd2Emails() {
+  if (!hasExplicitAdvanceRd2()) { toast('Everyone is still in the First Round pool.'); return; }
+  const panel = document.getElementById('rejectRd2EmailPanel');
+  const out = document.getElementById('rejectRd2EmailOut');
+  const btn = document.getElementById('showRejectRd2Emails');
+  if (!panel || !out) return;
+  if (!panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.textContent = 'Show rejection emails';
+    return;
+  }
+  const text = rejectRd2ShowText();
+  if (!text) { toast('No one on the rejection set'); return; }
+  out.value = text;
+  panel.hidden = false;
+  if (btn) btn.textContent = 'Hide rejection emails';
   out.focus();
   out.select();
 }
@@ -3900,6 +4072,7 @@ function renderRoundList(round) {
       <div class="topbar-spacer"></div>
       <span class="sub" id="listCount" style="color:var(--slate); font-size:12px;">${listCountLabel(round, list)}</span>
     </div>
+    ${r1 || round === 'round2' ? rd2ListEmailToolsHtml() : ''}
     ${!r1 && STATE.incompleteOnly && STATE.filterGroup === 'all' ? `<div class="queue-hint">Pick your review group to see only that pair’s unfinished assigned applications. Other groups stay visible until you do.</div>` : ''}
     ${r1 ? `<div class="queue-hint">Pick an interviewer to filter to their interviews. Unassigned people need someone chosen on their profile — it is not random.</div>` : ''}
     <div class="table-wrap">
@@ -3931,6 +4104,7 @@ function renderRoundList(round) {
   if (flaggedToggle) flaggedToggle.addEventListener('click', () => { STATE.flaggedOnly = !STATE.flaggedOnly; renderRoundList(round); });
   const incompleteToggle = document.getElementById('incompleteToggle');
   if (incompleteToggle) incompleteToggle.addEventListener('click', () => { STATE.incompleteOnly = !STATE.incompleteOnly; renderRoundList(round); });
+  if (r1 || round === 'round2') bindRd2EmailTools();
   bindReviewAs(contentEl, () => renderRoundList(round));
   contentEl.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const k = th.dataset.sort;
