@@ -503,7 +503,7 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 .interviewer-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .interviewer-chip { display: inline-flex; align-items: center; gap: 6px; }
 .interviewer-card .advance-controls input[type="text"] { min-width: 200px; }
-.advance-row-rd2 { grid-template-columns: 18px minmax(140px, 1.1fr) minmax(160px, 1.4fr) minmax(168px, auto); }
+.advance-row-rd2 { grid-template-columns: 18px minmax(140px, 1.1fr) minmax(160px, 1.4fr) minmax(220px, auto); }
 .advance-row-rd2 .nm { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; }
 .r1-notes-card textarea { min-height: 88px; }
 

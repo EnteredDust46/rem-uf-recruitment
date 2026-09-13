@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd1-personality-hold-20260909';
+const BUILD_STAMP = 'rd1-interviewer-std-20260913';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -236,6 +236,8 @@ function adoptState(data) {
     STATE.interviewers = normalizeInterviewers(data.interviewers);
   }
   liveVersion = data.updatedAt || null;
+  invalidateScreenStd();
+  invalidateRound1Std();
   // Fold unsent local edits on top so a poll cannot drop a just-clicked idx.
   applyPendingOps();
 }
@@ -475,6 +477,7 @@ async function flushSave(urgent) {
 // Every write goes through these, so the op is stashed before the state changes.
 function saveGrade(round, applicantId, field, key, value) {
   if (round === 'screen') invalidateScreenStd();
+  if (round === 'round1') invalidateRound1Std();
   let stored = value === undefined ? null : cloneJson(value);
   if (field === 'personalityIdx') {
     stored = hasPersonalityIdxValue(value) ? Number(value) : stored;
@@ -1239,6 +1242,67 @@ function formatScreenScorePairHtml(applicantId) {
   return '<span title="' + esc(title) + '">' + raw.toFixed(1) + ' raw · ' + std.toFixed(1) + ' std</span>';
 }
 
+// Interviewer-adjusted First Round score. Same /4-ish scale as the raw
+// remaining-question average. Derived live — never stored.
+//   standardized = raw - interviewerMean + overallMean
+// Interviewers with fewer than two scored interviews fall back to raw.
+// Unassigned or unscored people have no std.
+let _round1StdBundle = null;
+function invalidateRound1Std() { _round1StdBundle = null; }
+
+function round1StdBundle() {
+  if (_round1StdBundle) return _round1StdBundle;
+  const interviewers = {};
+  const all = [];
+  STATE.applicants.forEach(function (a) {
+    const raw = scoreFor('round1', a.id);
+    if (raw == null) return;
+    all.push(raw);
+    const iid = r1InterviewerId(a.id);
+    if (!iid) return;
+    if (!interviewers[iid]) interviewers[iid] = [];
+    interviewers[iid].push(raw);
+  });
+  const overallMean = all.length ? all.reduce(function (s, v) { return s + v; }, 0) / all.length : null;
+  const stats = {};
+  Object.keys(interviewers).forEach(function (iid) {
+    const vals = interviewers[iid];
+    const n = vals.length;
+    const mean = vals.reduce(function (s, v) { return s + v; }, 0) / n;
+    stats[iid] = { n: n, mean: mean };
+  });
+  _round1StdBundle = { overallMean: overallMean, interviewers: stats };
+  return _round1StdBundle;
+}
+
+function standardizedRound1Score(applicantId) {
+  const raw = scoreFor('round1', applicantId);
+  if (raw == null) return null;
+  const iid = r1InterviewerId(applicantId);
+  if (!iid) return null;
+  const bundle = round1StdBundle();
+  const iv = bundle.interviewers[iid];
+  if (!iv || iv.n < 2 || bundle.overallMean == null) return raw;
+  return raw - iv.mean + bundle.overallMean;
+}
+
+function round1BlendScore(applicantId) {
+  const raw = scoreFor('round1', applicantId);
+  if (raw == null) return null;
+  const std = standardizedRound1Score(applicantId);
+  if (std == null) return raw;
+  return (raw + std) / 2;
+}
+
+function formatRound1ScorePairHtml(applicantId) {
+  const raw = scoreFor('round1', applicantId);
+  if (raw == null) return '—';
+  const std = standardizedRound1Score(applicantId);
+  if (std == null) return raw.toFixed(1) + ' r1';
+  const title = 'Adjusted for interviewer grading vs the overall First Round mean';
+  return '<span title="' + esc(title) + '">' + raw.toFixed(1) + ' r1 · ' + std.toFixed(1) + ' std</span>';
+}
+
 // ---------------- Groups ----------------
 // Groups carry a share of the pool rather than an equal split, so a pair with less
 // capacity (Aya & Adam) gets proportionally fewer applicants. Shares are assigned by
@@ -1467,9 +1531,10 @@ function ensureAdvanceRd2Snapshot() {
 }
 
 function scoredR1Applicants() {
+  invalidateRound1Std();
   return firstRoundPool().slice().sort(function (a, b) {
-    const av = scoreFor('round1', a.id);
-    const bv = scoreFor('round1', b.id);
+    const av = round1BlendScore(a.id);
+    const bv = round1BlendScore(b.id);
     const aN = av == null ? -1 : av;
     const bN = bv == null ? -1 : bv;
     if (bN !== aN) return bN - aN;
@@ -1692,8 +1757,10 @@ function sortApplicantList(list, round) {
     else if (STATE.sortKey === 'gpa') { av = autoFor(a).gpa.value ?? -1; bv = autoFor(b).gpa.value ?? -1; }
     else if (STATE.sortKey === 'score') {
       if (round === 'screen') { av = screenBlendScore(a.id) ?? -1; bv = screenBlendScore(b.id) ?? -1; }
+      else if (round === 'round1') { av = round1BlendScore(a.id) ?? -1; bv = round1BlendScore(b.id) ?? -1; }
       else { av = scoreFor(round, a.id) ?? -1; bv = scoreFor(round, b.id) ?? -1; }
     }
+    else if (STATE.sortKey === 'r1std') { av = standardizedRound1Score(a.id) ?? -1; bv = standardizedRound1Score(b.id) ?? -1; }
     else if (STATE.sortKey === 'group') {
       if (round === 'round1') { av = interviewerName(r1InterviewerId(a.id)) || ''; bv = interviewerName(r1InterviewerId(b.id)) || ''; }
       else { av = ensureAssignment(round, a.id) || ''; bv = ensureAssignment(round, b.id) || ''; }
@@ -1959,6 +2026,7 @@ let lastRoundListScroll = 0;
 
 function render() {
   invalidateScreenStd();
+  invalidateRound1Std();
   const sameGrade = !!(gradeViewKey() && gradeViewKey() === lastGradeKey);
   const gradeSnap = sameGrade ? captureGradeScroll() : null;
   const sameOverview = STATE.view === 'overview' && lastOverviewView;
@@ -2297,19 +2365,18 @@ function renderAdvanceRd2Card() {
   const rows = ranked.map(function (a) {
     const on = isAdvanceRd2Checked(a.id);
     const g = STATE.grades.round1[a.id] || {};
-    const r1 = scoreFor('round1', a.id);
     const notes = notesSnippet(g.initialNotes, 64);
     const who = interviewerShort(g.interviewer) || interviewerName(g.interviewer);
     return `<label class="advance-row advance-row-rd2">
       <input type="checkbox" data-advance-rd2="${esc(a.id)}" ${on ? 'checked' : ''}>
       <span class="nm">${esc(a.name)}${g.knowFlag ? '<span class="know-badge">Knows them</span>' : ''}${g.thankYou ? '<span class="follow-badge yes">Followed up</span>' : '<span class="follow-badge no">No follow-up</span>'}</span>
       <span class="sub">${esc(who || 'Unassigned')}${g.interviewTime ? ' · ' + esc(formatInterviewTime(g.interviewTime)) : ''}${notes ? ' · ' + esc(notes) : ''}</span>
-      <span class="mono">${r1 == null ? '—' : r1.toFixed(1)} r1 · ${formatScreenScorePairHtml(a.id)}</span>
+      <span class="mono">${formatRound1ScorePairHtml(a.id)} · ${formatScreenScorePairHtml(a.id)}</span>
     </label>`;
   }).join('') || '<div class="sub" style="color:var(--slate); padding:8px 0;">No one is in the First Round pool yet.</div>';
   return `<div class="card card-pad advance-card" style="margin-bottom:22px;">
     <div class="section-title">Who advances to Round 2 <span class="n">from First Round</span></div>
-    <p class="advance-copy">Same idea as First Round: Apply top N to set the Round 2 pool from people who made First Round. Until then, Second Round includes everyone in First Round. Apply top N ranks by First Round interview average (remaining questions), then you can check or uncheck. Scores do not auto-advance anyone.</p>
+    <p class="advance-copy">Same idea as First Round: Apply top N to set the Round 2 pool from people who made First Round. Until then, Second Round includes everyone in First Round. Apply top N ranks by the average of raw First Round interview score and interviewer-standardized — then you can check or uncheck. Scores do not auto-advance anyone.</p>
     <div class="advance-controls">
       <label class="advance-n-label" for="advanceRd2TopN">Advance top N</label>
       <input type="number" id="advanceRd2TopN" min="0" step="1" value="${topN}">
@@ -2334,7 +2401,7 @@ function bindAdvanceRd2Card() {
     const n = nInput ? Number(nInput.value) : 0;
     applyAdvanceRd2TopN(n);
     renderOverviewPreserveScroll();
-    toast('Round 2 set to top ' + Math.max(0, Math.floor(Number(n) || 0)) + ' by First Round interview average');
+    toast('Round 2 set to top ' + Math.max(0, Math.floor(Number(n) || 0)) + ' by blended First Round score');
   });
   bindClearAdvanceRd2Button(document.getElementById('clearAdvanceRd2'));
   const copyBtn = document.getElementById('copyAdvanceRd2Emails');
@@ -3083,7 +3150,7 @@ function filteredFlaggedPool() {
 }
 
 function roundListRowsHtml(round, list) {
-  const cols = round === 'round1' ? 7 : 6;
+  const cols = round === 'round1' ? 8 : 6;
   return list.map(a => renderRow(round, a)).join('') || `<tr><td colspan="${cols}"><div class="empty-state">${emptyRoundMessage(round)}</div></td></tr>`;
 }
 
@@ -3095,7 +3162,7 @@ function flaggedListRowsHtml(list) {
       <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${flagBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
       <td>${gpaCell(a)}</td>
       <td>${esc(ROUND_LABEL[round] || round)}</td>
-      <td><span class="score-pill${round === 'screen' && score !== null ? ' pair' : ''}">${score === null ? '—' : (round === 'round2' ? score : round === 'screen' ? formatScreenScorePairHtml(a.id) : score.toFixed(1))}</span></td>
+      <td><span class="score-pill${(round === 'screen' || round === 'round1') && score !== null ? ' pair' : ''}">${score === null ? '—' : (round === 'round2' ? score : round === 'screen' ? formatScreenScorePairHtml(a.id) : formatRound1ScorePairHtml(a.id))}</span></td>
     </tr>`;
   }).join('') || `<tr><td colspan="4"><div class="empty-state">No one is flagged for a second reviewer.</div></td></tr>`;
 }
@@ -3171,7 +3238,8 @@ function renderRoundList(round) {
           <th>Notes</th>
           <th>Follow-up</th>
           <th data-sort="appscore" class="${STATE.sortKey === 'appscore' ? 'sorted' : ''}">App /5</th>
-          <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}">R1 avg</th>`
+          <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}">R1 avg</th>
+          <th data-sort="r1std" class="${STATE.sortKey === 'r1std' ? 'sorted' : ''}" title="Interviewer-adjusted First Round score">Std</th>`
     : `<th data-sort="name" class="${STATE.sortKey === 'name' ? 'sorted' : ''}">Applicant</th>
           <th data-sort="gpa" class="${STATE.sortKey === 'gpa' ? 'sorted' : ''}">GPA</th>
           <th>Position</th>
@@ -3302,6 +3370,7 @@ function renderRow(round, a) {
   const scoreClass = score === null ? 'none' : (round === 'round1' && score < 3) ? 'bad' : (round !== 'round1' && score >= maxScale * 0.75) ? 'good' : '';
   if (round === 'round1') {
     const g = STATE.grades.round1[a.id] || {};
+    const std = standardizedRound1Score(a.id);
     const who = interviewerName(g.interviewer);
     const time = formatInterviewTime(g.interviewTime);
     const notes = notesSnippet(g.initialNotes, 72);
@@ -3313,6 +3382,7 @@ function renderRow(round, a) {
       <td>${thankBadge(a)}</td>
       <td><span class="score-pill pair">${formatScreenScorePairHtml(a.id)}</span></td>
       <td><span class="score-pill ${scoreClass}">${score === null ? '—' : score.toFixed(1)}</span></td>
+      <td><span class="score-pill ${std == null ? 'none' : scoreClass}" title="${std == null ? 'Needs an assigned interviewer and a First Round average' : 'raw − interviewer mean + overall mean'}">${std == null ? '—' : std.toFixed(1)}</span></td>
     </tr>`;
   }
   const grp = assignmentGroup(round, a.id);
@@ -3477,6 +3547,7 @@ function bindR1AssignControls(a, g) {
   if (who) who.addEventListener('change', function () {
     g.interviewer = who.value || undefined;
     saveGrade('round1', a.id, 'interviewer', null, g.interviewer);
+    updateHeaderScore('round1', g, a);
     toast(g.interviewer ? 'Assigned to ' + (interviewerName(g.interviewer) || g.interviewer) : 'Unassigned');
   });
   const time = document.getElementById('r1InterviewTime');
@@ -3524,7 +3595,16 @@ function headerScoreInner(round, g, a) {
     return '<span class="big">' + raw.toFixed(1) + '</span><span class="of">/ 5 raw</span>'
       + '<span class="std-inline">' + std.toFixed(1) + ' std' + zBit + '</span>';
   }
-  const of = round === 'round2' ? '/ 24' : '/ 4 avg';
+  if (round === 'round1') {
+    const v = round1Average(g);
+    if (v == null) return '<span class="big">—</span><span class="of">/ 4 avg</span>';
+    const id = a && a.id ? a.id : STATE.currentApplicantId;
+    const std = id ? standardizedRound1Score(id) : null;
+    if (std == null) return '<span class="big">' + v.toFixed(1) + '</span><span class="of">/ 4 avg</span>';
+    return '<span class="big">' + v.toFixed(1) + '</span><span class="of">/ 4 raw</span>'
+      + '<span class="std-inline" title="raw − interviewer mean + overall mean">' + std.toFixed(1) + ' std</span>';
+  }
+  const of = '/ 24';
   return '<span class="big">' + fmtScore(round, g, a) + '</span><span class="of">' + of + '</span>';
 }
 
@@ -4184,12 +4264,15 @@ function buildCsv(round) {
       return [a.name, a.classYear, a.late ? 'Late' : '', effScore(a, g, 'academics') ?? '', g.scores.resume ?? '', g.scores.experience ?? '', g.scores.leadership ?? '', g.scores.essay ?? '', g.notes || '', grp ? grp.name : '', raw ?? '', std == null ? '' : +std.toFixed(3), blend == null ? '' : +blend.toFixed(3), a.attendance.coffeeChats.length ? 'Yes' : 'No', a.attendance.infoSession ? 'Yes' : 'No', a.attendance.meetMembers ? 'Yes' : 'No'];
     });
   } else if (round === 'round1') {
-    header = ['Candidate (First & Last) Name', 'Candidates School Email', 'Interviewer', 'Interview time', 'Initial notes', 'Thank-you', 'Knows them', 'Fit Q1', 'Fit Q2', 'Fit Q3', 'Personal Q1', 'Personal Q2', 'Personality Q', 'Average Score', 'App raw', 'App std', 'Recommendation', 'Notes'];
+    header = ['Candidate (First & Last) Name', 'Candidates School Email', 'Interviewer', 'Interview time', 'Initial notes', 'Thank-you', 'Knows them', 'Fit Q1', 'Fit Q2', 'Fit Q3', 'Personal Q1', 'Personal Q2', 'Personality Q', 'Average Score', 'R1 std', 'R1 blend', 'App raw', 'App std', 'Recommendation', 'Notes'];
     rows = poolForRound('round1').map(a => {
       const g = STATE.grades.round1[a.id] || { scores: {} };
       const raw = scoreFor('screen', a.id);
       const std = raw == null ? null : standardizedScreenScore(a.id);
-      return [a.name, a.email, interviewerName(g.interviewer) || '', g.interviewTime || '', g.initialNotes || '', g.thankYou ? 'Yes' : 'No', g.knowFlag ? 'Yes' : '', g.scores.fit0 ?? '', g.scores.fit1 ?? '', g.scores.fit2 ?? '', g.scores.personal1 ?? '', g.scores.personal2 ?? '', g.scores.personality ?? '', round1Average(g) ?? '', raw ?? '', std == null ? '' : +std.toFixed(3), g.recommendation || '', g.notes || ''];
+      const r1raw = round1Average(g);
+      const r1std = standardizedRound1Score(a.id);
+      const r1blend = round1BlendScore(a.id);
+      return [a.name, a.email, interviewerName(g.interviewer) || '', g.interviewTime || '', g.initialNotes || '', g.thankYou ? 'Yes' : 'No', g.knowFlag ? 'Yes' : '', g.scores.fit0 ?? '', g.scores.fit1 ?? '', g.scores.fit2 ?? '', g.scores.personal1 ?? '', g.scores.personal2 ?? '', g.scores.personality ?? '', r1raw ?? '', r1std == null ? '' : +r1std.toFixed(3), r1blend == null ? '' : +r1blend.toFixed(3), raw ?? '', std == null ? '' : +std.toFixed(3), g.recommendation || '', g.notes || ''];
     });
   } else {
     header = ['Candidate (First & Last) Name', 'Case Assigned', 'Introduction', 'Framework', 'Market Sizing', 'Quant Reasoning', 'Brainstorming', 'Recommendation Dim', 'Fit & Communication', 'Final Grade / 24', 'Recommendation', 'Interviewer Notes'];
