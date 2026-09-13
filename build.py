@@ -406,6 +406,20 @@ def rubric_round2():
         },
         'levelLabels': ['Exceeds Expectations', 'Achieves Expectations', 'Meets Some Expectations', "Doesn't Meet Expectations"],
         'maxScore': 24,
+        'behaviorals': [
+            {'id': 'best-in-room-of-1000', 'title': 'Best in a room of 1000', 'q': 'What is the thing that you believe in, in a room of 1000 people, you are the best at?'},
+            {'id': 'pack-up-and-move', 'title': 'Pack up and move', 'q': 'If you had to immediately pack everything and move somewhere, where would you go and why?'},
+            {'id': 'goat-of-anything', 'title': 'GOAT of anything', 'q': 'If you could be the GOAT of anything, what would you pick?'},
+            {'id': 'any-profession', 'title': 'Any profession', 'q': 'If you could pick any profession and be paid enough to live a great life, what would you do?'},
+            {'id': 'cannot-live-without', 'title': 'Cannot live without', 'q': 'What is one thing that you cannot live without?'},
+            {'id': 'what-animal', 'title': 'What animal', 'q': 'If you could be an animal, what animal would you be?'},
+        ],
+        'caseInstructions': (
+            'Run the case first, then ask 1–2 behaviorals from the list (more is fine). '
+            'Score each case dimension 1–4 using the bands on the cards: 1 Unacceptable · '
+            '2 Not a good fit but showing promise · 3 Satisfactory fit · 4 Exceeding Expectations. '
+            'Paste the official case prompt here when it is sent — last year cases were numbered 1–5.'
+        ),
     }
 
 

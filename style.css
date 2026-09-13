@@ -388,6 +388,34 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 
 .case-select { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
 
+.r2-bq-hint { color: var(--slate); margin-bottom: 10px; }
+.r2-bq-list { display: flex; flex-direction: column; gap: 6px; }
+.r2-bq {
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  background: var(--paper); overflow: hidden;
+}
+.r2-bq.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.r2-bq-bar { display: flex; align-items: center; gap: 8px; padding: 2px 6px 2px 2px; }
+.r2-bq-title {
+  flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 0; background: transparent; text-align: left; cursor: pointer;
+  padding: 8px 10px; font: inherit; color: inherit; border-radius: var(--radius-s);
+}
+.r2-bq-title:hover { background: var(--accent-soft); }
+.r2-bq-label { font-size: 13.5px; font-weight: 650; }
+.r2-bq-clear {
+  border: 1px solid var(--line-strong); background: var(--paper-raised); color: var(--slate);
+  border-radius: 999px; font-size: 11px; font-weight: 600; padding: 3px 9px; cursor: pointer;
+}
+.r2-bq-clear:hover { border-color: var(--accent); color: var(--accent-ink); }
+.r2-bq-body { padding: 4px 14px 14px; border-top: 1px solid var(--line); }
+.r2-case-instructions {
+  font-size: 13px; line-height: 1.5; color: var(--ink-soft);
+  background: var(--paper); border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-s); padding: 10px 12px;
+}
+.dim-head .n { color: var(--slate); font-weight: 400; font-size: 12px; }
+
 .university-tag { font-size: 11px; color: var(--slate); }
 
 .progress-track { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; display: flex; }

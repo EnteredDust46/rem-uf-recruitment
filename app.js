@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-copy-emails-20260913';
+const BUILD_STAMP = 'rd2-behaviorals-20260913';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -134,7 +134,7 @@ async function pollForUpdates() {
     // Don't consume this version while someone is mid-keystroke — adoptState
     // replaces STATE.vouches and would orphan the textarea's in-memory record.
     // A just-set R1 personality pick is the same class: chips aren't inputs.
-    if (isEditingField() || shouldHoldPersonalityAgainstPoll()) return;
+    if (isEditingField() || shouldHoldPersonalityAgainstPoll() || shouldHoldR2AgainstPoll()) return;
     lastEtag = res.headers.get('etag');
     const json = await res.json();
     if (json.sha === currentSha) return;
@@ -152,6 +152,10 @@ async function pollForUpdates() {
       }
       if (STATE.view === 'grade' && STATE.gradeRound === 'round1') {
         applyLiveR1GradeUpdate();
+        return;
+      }
+      if (STATE.view === 'grade' && STATE.gradeRound === 'round2') {
+        applyLiveR2GradeUpdate();
         return;
       }
       render();
@@ -193,6 +197,102 @@ function shouldHoldPersonalityAgainstPoll() {
   return false;
 }
 
+// Last year's Fox behavioral bank (sheet "Final Round Grading Rubric", col A).
+// Titles are short chips; `q` is the full prompt. Stable ids are slugs, not indexes.
+const R2_BEHAVIORAL_FALLBACK = [
+  { id: 'best-in-room-of-1000', title: 'Best in a room of 1000', q: 'What is the thing that you believe in, in a room of 1000 people, you are the best at?' },
+  { id: 'pack-up-and-move', title: 'Pack up and move', q: 'If you had to immediately pack everything and move somewhere, where would you go and why?' },
+  { id: 'goat-of-anything', title: 'GOAT of anything', q: 'If you could be the GOAT of anything, what would you pick?' },
+  { id: 'any-profession', title: 'Any profession', q: 'If you could pick any profession and be paid enough to live a great life, what would you do?' },
+  { id: 'cannot-live-without', title: 'Cannot live without', q: 'What is one thing that you cannot live without?' },
+  { id: 'what-animal', title: 'What animal', q: 'If you could be an animal, what animal would you be?' },
+];
+const R2_BEHAVIORAL_BANDS = {
+  1: { label: 'Unacceptable', text: 'Gives no meaningful answer or responds in a way that shows a lack of self-awareness or accountability.' },
+  2: { label: 'Not a good fit but showing promise', text: 'Provides a generic or surface-level response with little reflection.' },
+  3: { label: 'Satisfactory fit', text: 'Offers a thoughtful answer that demonstrates some self-awareness and a willingness to grow.' },
+  4: { label: 'Exceeding Expectations', text: 'Provides a detailed, introspective answer showing strong self-awareness and a clear point of view.' },
+};
+const R2_CASE_INSTRUCTIONS = 'Run the case first, then ask 1–2 behaviorals from the list (more is fine). Score each case dimension 1–4 using the bands on the cards: 1 Unacceptable · 2 Not a good fit but showing promise · 3 Satisfactory fit · 4 Exceeding Expectations. Paste the official case prompt here when it is sent — last year cases were numbered 1–5.';
+
+const r2BehavioralHolds = {};
+const R2_BEHAVIORAL_HOLD_MS = 30000;
+
+function r2BehavioralList() {
+  const fromB = B.rubrics && B.rubrics.round2 && B.rubrics.round2.behaviorals;
+  return (fromB && fromB.length) ? fromB : R2_BEHAVIORAL_FALLBACK;
+}
+
+function r2BehavioralById(id) {
+  const list = r2BehavioralList();
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].id === id) return list[i];
+  }
+  return null;
+}
+
+function r2KnownBehavioralId(id) {
+  return !!r2BehavioralById(id);
+}
+
+function normalizeBehavioralSelected(v) {
+  if (!Array.isArray(v)) return [];
+  const out = [];
+  const seen = {};
+  v.forEach(function (id) {
+    if (!id || seen[id] || !r2KnownBehavioralId(id)) return;
+    seen[id] = true;
+    out.push(id);
+  });
+  return out;
+}
+
+function hasBehavioralSelectedValue(v) {
+  return Array.isArray(v) && v.length > 0;
+}
+
+function holdR2Behaviorals(id, selected) {
+  if (!id) return;
+  const ids = normalizeBehavioralSelected(selected);
+  r2BehavioralHolds[id] = { ids: ids, until: Date.now() + R2_BEHAVIORAL_HOLD_MS };
+}
+
+function heldR2Behaviorals(id) {
+  const h = id ? r2BehavioralHolds[id] : null;
+  if (!h || Date.now() > h.until) return null;
+  return h.ids.slice();
+}
+
+function hasPendingR2BehavioralOp() {
+  return pendingOps().some(function (op) {
+    return op && op.kind === 'grade' && op.round === 'round2' && op.field === 'behavioralSelected' && Array.isArray(op.value);
+  });
+}
+
+function shouldHoldR2AgainstPoll() {
+  if (hasPendingR2BehavioralOp()) return true;
+  if (STATE.view === 'grade' && STATE.gradeRound === 'round2' && STATE.currentApplicantId) {
+    if (heldR2Behaviorals(STATE.currentApplicantId) != null) return true;
+  }
+  return false;
+}
+
+function r2BehavioralSelected(g) {
+  const held = g && STATE.currentApplicantId && STATE.grades.round2[STATE.currentApplicantId] === g
+    ? heldR2Behaviorals(STATE.currentApplicantId) : null;
+  if (held) return held;
+  if (g && Array.isArray(g.behavioralSelected)) return normalizeBehavioralSelected(g.behavioralSelected);
+  const scores = (g && g.scores) || {};
+  const notes = (g && g.qnotes) || {};
+  const inferred = [];
+  r2BehavioralList().forEach(function (q) {
+    if (typeof scores[q.id] === 'number' || (typeof notes[q.id] === 'string' && notes[q.id].trim())) {
+      inferred.push(q.id);
+    }
+  });
+  return inferred;
+}
+
 function keepLocalPersonalityIdx(prevR1) {
   const ids = {};
   Object.keys(prevR1 || {}).forEach(function (id) { ids[id] = true; });
@@ -216,9 +316,40 @@ function keepLocalPersonalityIdx(prevR1) {
   });
 }
 
+function keepLocalR2Behaviorals(prevR2) {
+  const ids = {};
+  Object.keys(prevR2 || {}).forEach(function (id) { ids[id] = true; });
+  Object.keys(r2BehavioralHolds).forEach(function (id) { ids[id] = true; });
+  if (STATE.currentApplicantId) ids[STATE.currentApplicantId] = true;
+  Object.keys(ids).forEach(function (id) {
+    const old = (prevR2 || {})[id];
+    const held = heldR2Behaviorals(id);
+    const localSel = held != null ? held
+      : (old && Array.isArray(old.behavioralSelected) ? normalizeBehavioralSelected(old.behavioralSelected) : null);
+    let incoming = STATE.grades.round2[id];
+    if (!incoming) {
+      incoming = old ? old : { scores: {}, notes: '' };
+      STATE.grades.round2[id] = incoming;
+    }
+    if (held != null) incoming.behavioralSelected = held;
+    else if (localSel && localSel.length && !Array.isArray(incoming.behavioralSelected)) {
+      incoming.behavioralSelected = localSel;
+    }
+    if (old && old.qnotes && typeof old.qnotes === 'object') {
+      incoming.qnotes = Object.assign({}, old.qnotes, incoming.qnotes);
+    }
+    if (old && old.caseNotes && (incoming.caseNotes == null || incoming.caseNotes === '')) {
+      incoming.caseNotes = old.caseNotes;
+    }
+    if (old && old.caseScore != null && incoming.caseScore == null) incoming.caseScore = old.caseScore;
+    if (old && old.scores) incoming.scores = Object.assign({}, old.scores, incoming.scores);
+  });
+}
+
 function adoptState(data) {
   if (!data || typeof data !== 'object') return;
   const prevR1 = STATE.grades.round1;
+  const prevR2 = STATE.grades.round2;
   ROUNDS.forEach(function (r) {
     const g = (data.grades || {})[r];
     if (g && typeof g === 'object') STATE.grades[r] = g;
@@ -226,6 +357,7 @@ function adoptState(data) {
   // In-memory / pending personality pick wins until flushed. Remote omission
   // (poll before PUT, older tab) must not unselect the chip.
   keepLocalPersonalityIdx(prevR1);
+  keepLocalR2Behaviorals(prevR2);
   if (data.vouches && typeof data.vouches === 'object') STATE.vouches = data.vouches;
   if (data.assignments && typeof data.assignments === 'object') {
     STATE.assignments = Object.assign({ screen: {}, round1: {}, round2: {} }, data.assignments);
@@ -287,7 +419,7 @@ function cleanRecords(map) {
   const out = {};
   Object.keys(map || {}).forEach(function (id) {
     const rec = cleanForSave(map[id]);
-    if (rec && Object.keys(rec).length && (hasManualScore(rec) || isExplicitAcademicsNA(rec) || rec.notes || rec.flagSecond || rec.recommendation || rec.caseId || hasR1Meta(rec))) {
+    if (rec && Object.keys(rec).length && (hasManualScore(rec) || isExplicitAcademicsNA(rec) || rec.notes || rec.flagSecond || rec.recommendation || rec.caseId || hasR1Meta(rec) || hasR2Meta(rec))) {
       out[id] = rec;
     }
   });
@@ -353,6 +485,13 @@ function applyPendingOps() {
           } else {
             rec.personalityIdx = op.value;
           }
+        } else if (op.field === 'behavioralSelected') {
+          if (Array.isArray(op.value)) rec.behavioralSelected = normalizeBehavioralSelected(op.value);
+          else if (Array.isArray(rec.behavioralSelected) && rec.behavioralSelected.length) {
+            /* keep a live selection over a missing snapshot */
+          } else {
+            rec.behavioralSelected = [];
+          }
         } else {
           rec[op.field] = op.value;
         }
@@ -407,6 +546,7 @@ async function flushSave(urgent) {
   // fired; fold live textareas in so this PUT cannot drop them.
   captureOpenVouchNote();
   captureOpenR1Fields();
+  captureOpenR2Fields();
   // Only the ops this write actually covers are retired; an edit made while the
   // request was in flight stays pending for the next one.
   const covered = pendingOps().length;
@@ -483,6 +623,10 @@ function saveGrade(round, applicantId, field, key, value) {
   if (field === 'personalityIdx') {
     stored = hasPersonalityIdxValue(value) ? Number(value) : stored;
     if (hasPersonalityIdxValue(stored)) holdPersonalityPick(applicantId, stored);
+  }
+  if (field === 'behavioralSelected') {
+    stored = normalizeBehavioralSelected(value);
+    holdR2Behaviorals(applicantId, stored);
   }
   recordOp({ kind: 'grade', round: round, id: applicantId, field: field, key: key, value: stored });
   queueSave();
@@ -608,6 +752,32 @@ function captureOpenR1Fields() {
   const held = heldPersonalityIdx(STATE.currentApplicantId);
   if (held != null) g.personalityIdx = held;
   // Never snapshot undefined over a live 0/1/2 (empty chip row during remount).
+}
+
+function captureOpenR2Fields() {
+  if (STATE.gradeRound !== 'round2' || !STATE.currentApplicantId) return;
+  const g = getGrade('round2', STATE.currentApplicantId);
+  const main = document.getElementById('gradeMain');
+  if (!main) return;
+  main.querySelectorAll('textarea[data-notekey]').forEach(function (ta) {
+    if (ta.dataset.notekey === '__main') g.notes = ta.value;
+    else if (ta.dataset.notekey === '__case') g.caseNotes = ta.value;
+    else {
+      g.qnotes = g.qnotes || {};
+      g.qnotes[ta.dataset.notekey] = ta.value;
+    }
+  });
+  const caseNotes = document.getElementById('r2CaseNotes');
+  if (caseNotes) g.caseNotes = caseNotes.value;
+  const openIds = [];
+  main.querySelectorAll('.r2-bq.open[data-bqid]').forEach(function (row) {
+    if (row.dataset.bqid) openIds.push(row.dataset.bqid);
+  });
+  if (openIds.length || Array.isArray(g.behavioralSelected)) {
+    const next = normalizeBehavioralSelected(openIds.length ? openIds : g.behavioralSelected);
+    const held = heldR2Behaviorals(STATE.currentApplicantId);
+    g.behavioralSelected = held != null ? held : next;
+  }
 }
 
 function flushAllPending() { flushSave(true); }
@@ -1099,6 +1269,15 @@ function hasR1Meta(rec) {
   if (rec.thankYou === true || rec.thankYou === false) return true;
   if (rec.knowFlag === true || rec.knowFlag === false) return true;
   if (rec.personalityIdx != null && rec.personalityIdx !== '') return true;
+  if (rec.qnotes && typeof rec.qnotes === 'object' && Object.keys(rec.qnotes).length) return true;
+  return false;
+}
+
+function hasR2Meta(rec) {
+  if (!rec) return false;
+  if (Array.isArray(rec.behavioralSelected) && rec.behavioralSelected.length) return true;
+  if (rec.caseNotes) return true;
+  if (rec.caseScore != null && rec.caseScore !== '') return true;
   if (rec.qnotes && typeof rec.qnotes === 'object' && Object.keys(rec.qnotes).length) return true;
   return false;
 }
@@ -3159,6 +3338,20 @@ function applyLiveR1GradeUpdate() {
   updateHeaderScore('round1', g, a);
 }
 
+function applyLiveR2GradeUpdate() {
+  setSaveStatus(STATE.saveStatus);
+  const a = STATE.byId[STATE.currentApplicantId];
+  const main = document.getElementById('gradeMain');
+  if (!a || !main) return;
+  const g = getGrade('round2', a.id);
+  syncR2BehavioralRows(main, g, a);
+  const R = B.rubrics.round2;
+  (R.dims || []).forEach(function (d) { updateR2ScoreUI(main, g, d.key); });
+  if (R.fitDim) updateR2ScoreUI(main, g, R.fitDim.key);
+  updateR2ScoreUI(main, g, 'caseScore');
+  updateHeaderScore('round2', g, a);
+}
+
 function pollShouldRemountOverview(advanceChanged) {
   if (STATE.view !== 'overview') return true;
   if (advanceListRecentlyUsed()) return false;
@@ -3851,11 +4044,16 @@ function bindScoreButtons(container, round, applicantId, afterSet) {
 
 function bindNotesFields(container, round, applicantId) {
   container.querySelectorAll('textarea[data-notekey]').forEach(ta => {
+    if (ta.dataset.bound === '1') return;
+    ta.dataset.bound = '1';
     function persist() {
       const g = getGrade(round, applicantId);
       if (ta.dataset.notekey === '__main') {
         g.notes = ta.value;
         saveGrade(round, applicantId, 'notes', null, ta.value);
+      } else if (ta.dataset.notekey === '__case') {
+        g.caseNotes = ta.value;
+        saveGrade(round, applicantId, 'caseNotes', null, ta.value);
       } else {
         g.qnotes = g.qnotes || {};
         g.qnotes[ta.dataset.notekey] = ta.value;
@@ -4141,19 +4339,216 @@ function renderRound1Grade(a, g) {
   });
 }
 
+function r2CaseInstructionsText() {
+  const fromB = B.rubrics && B.rubrics.round2 && B.rubrics.round2.caseInstructions;
+  return (fromB && String(fromB).trim()) ? String(fromB) : R2_CASE_INSTRUCTIONS;
+}
+
+function r2ScorePill(val) {
+  return `<span class="score-pill ${val ? '' : 'none'}">${val || '—'}</span>`;
+}
+
+function r2BehavioralBodyHtml(q, g) {
+  const score = g.scores && g.scores[q.id];
+  return `<div class="r2-bq-body">
+      <div class="read-aloud">Read aloud</div>
+      <div class="prompt">${esc(q.q)}</div>
+      <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
+        ${['1', '2', '3', '4'].map(function (k) {
+          const n = Number(k);
+          const crit = R2_BEHAVIORAL_BANDS[n] || {};
+          return `<div class="band-opt ${score === n ? 'sel' : ''}" data-key="${esc(q.id)}" data-val="${k}"><span class="sc">${k}</span>${esc(crit.text || crit.label || '')}</div>`;
+        }).join('')}
+      </div>
+      <div class="notes-field"><textarea data-notekey="${esc(q.id)}" placeholder="Candidate's answer, notes…">${esc((g.qnotes && g.qnotes[q.id]) || '')}</textarea></div>
+    </div>`;
+}
+
+function r2BehavioralRowHtml(q, g, selected) {
+  const score = g.scores && g.scores[q.id];
+  const open = selected.indexOf(q.id) !== -1;
+  return `<div class="r2-bq${open ? ' open sel' : ''}" data-bqid="${esc(q.id)}">
+      <div class="r2-bq-bar">
+        <button type="button" class="r2-bq-title" data-bqid="${esc(q.id)}">
+          <span class="r2-bq-label">${esc(q.title)}</span>
+          ${r2ScorePill(score)}
+        </button>
+        ${open ? `<button type="button" class="r2-bq-clear" data-bqclear="${esc(q.id)}">Clear</button>` : ''}
+      </div>
+      ${open ? r2BehavioralBodyHtml(q, g) : ''}
+    </div>`;
+}
+
+function r2SelectedCountHtml(selected) {
+  const n = selected.length;
+  const extra = n > 2 ? ' · more than 2 selected' : '';
+  return n + ' selected · usually 1–2' + extra;
+}
+
+function persistR2BehavioralSelected(a, selected) {
+  const rec = getGrade('round2', a.id);
+  rec.behavioralSelected = normalizeBehavioralSelected(selected);
+  holdR2Behaviorals(a.id, rec.behavioralSelected);
+  if (rec.qnotes) saveGrade('round2', a.id, 'qnotes', null, cloneJson(rec.qnotes));
+  saveGrade('round2', a.id, 'behavioralSelected', null, rec.behavioralSelected.slice());
+  return rec;
+}
+
+function updateR2ScoreUI(container, g, key) {
+  if (!container) return;
+  const isCaseOverall = key === 'caseScore';
+  container.querySelectorAll('.band-opt[data-key="' + key + '"]').forEach(function (opt) {
+    const cur = isCaseOverall ? g.caseScore : g.scores[key];
+    opt.classList.toggle('sel', cur === Number(opt.dataset.val));
+  });
+  const sample = container.querySelector('.band-opt[data-key="' + key + '"]');
+  const card = sample && sample.closest('.dim-card, .r2-bq');
+  const pill = card && card.querySelector('.score-pill');
+  if (pill) {
+    const v = isCaseOverall ? g.caseScore : g.scores[key];
+    pill.textContent = v || '—';
+    pill.classList.toggle('none', !v);
+  }
+}
+
+function bindR2BandOpts(root, a) {
+  root.querySelectorAll('.band-opt').forEach(function (el) {
+    if (el.dataset.bound === '1') return;
+    el.dataset.bound = '1';
+    el.addEventListener('click', function () {
+      captureOpenR2Fields();
+      const rec = getGrade('round2', a.id);
+      const key = el.dataset.key, val = Number(el.dataset.val);
+      const main = document.getElementById('gradeMain') || root;
+      if (key === 'caseScore') {
+        rec.caseScore = rec.caseScore === val ? undefined : val;
+        saveGrade('round2', a.id, 'caseScore', null, rec.caseScore);
+        updateR2ScoreUI(main, rec, 'caseScore');
+        updateHeaderScore('round2', rec);
+        return;
+      }
+      rec.scores[key] = rec.scores[key] === val ? undefined : val;
+      if (rec.qnotes) saveGrade('round2', a.id, 'qnotes', null, cloneJson(rec.qnotes));
+      saveGrade('round2', a.id, 'score', key, rec.scores[key]);
+      updateR2ScoreUI(main, rec, key);
+      updateHeaderScore('round2', rec);
+    });
+  });
+}
+
+function bindR2BehavioralRow(row, a) {
+  const title = row.querySelector('.r2-bq-title');
+  if (title && title.dataset.bound !== '1') {
+    title.dataset.bound = '1';
+    title.addEventListener('click', function (evt) {
+      if (evt) evt.stopPropagation();
+      captureOpenR2Fields();
+      const rec = getGrade('round2', a.id);
+      const id = title.dataset.bqid;
+      if (!id) return;
+      const selected = r2BehavioralSelected(rec).slice();
+      if (selected.indexOf(id) === -1) selected.push(id);
+      persistR2BehavioralSelected(a, selected);
+      syncR2BehavioralRows(document.getElementById('gradeMain'), getGrade('round2', a.id), a);
+    });
+  }
+  const clear = row.querySelector('.r2-bq-clear');
+  if (clear && clear.dataset.bound !== '1') {
+    clear.dataset.bound = '1';
+    clear.addEventListener('click', function (evt) {
+      if (evt) { evt.preventDefault(); evt.stopPropagation(); }
+      captureOpenR2Fields();
+      const rec = getGrade('round2', a.id);
+      const id = clear.dataset.bqclear;
+      const selected = r2BehavioralSelected(rec).filter(function (x) { return x !== id; });
+      persistR2BehavioralSelected(a, selected);
+      syncR2BehavioralRows(document.getElementById('gradeMain'), getGrade('round2', a.id), a);
+    });
+  }
+  bindR2BandOpts(row, a);
+  bindNotesFields(row, 'round2', a.id);
+}
+
+function syncR2BehavioralRows(container, g, a) {
+  if (!container) return;
+  const selected = r2BehavioralSelected(g);
+  const hint = container.querySelector('#r2BehavioralCount');
+  if (hint) hint.textContent = r2SelectedCountHtml(selected);
+  container.querySelectorAll('.r2-bq[data-bqid]').forEach(function (row) {
+    const id = row.dataset.bqid;
+    const q = r2BehavioralById(id);
+    if (!q) return;
+    const shouldOpen = selected.indexOf(id) !== -1;
+    const isOpen = row.classList.contains('open');
+    const focused = row.contains(document.activeElement) && isEditingField();
+    if (shouldOpen && !isOpen) {
+      row.classList.add('open', 'sel');
+      if (!row.querySelector('.r2-bq-body')) row.insertAdjacentHTML('beforeend', r2BehavioralBodyHtml(q, g));
+      const bar = row.querySelector('.r2-bq-bar');
+      if (bar && !bar.querySelector('.r2-bq-clear')) {
+        bar.insertAdjacentHTML('beforeend', `<button type="button" class="r2-bq-clear" data-bqclear="${esc(id)}">Clear</button>`);
+      }
+      bindR2BehavioralRow(row, a);
+    } else if (!shouldOpen && isOpen && !focused) {
+      row.classList.remove('open', 'sel');
+      const body = row.querySelector('.r2-bq-body');
+      if (body) body.remove();
+      const clr = row.querySelector('.r2-bq-clear');
+      if (clr) clr.remove();
+    } else {
+      row.classList.toggle('sel', shouldOpen);
+      updateR2ScoreUI(row, g, id);
+    }
+    if (shouldOpen) bindR2BehavioralRow(row, a);
+  });
+}
+
 function renderRound2Grade(a, g) {
   const main = document.getElementById('gradeMain');
   const R = B.rubrics.round2;
+  captureOpenR2Fields();
+  g = getGrade('round2', a.id);
+  if (!Array.isArray(g.behavioralSelected)) g.behavioralSelected = r2BehavioralSelected(g);
+  const selected = r2BehavioralSelected(g);
+  const qs = r2BehavioralList();
+
   main.innerHTML = `
-    <div class="card card-pad" style="margin-bottom:14px;">
-      <div class="field-label">Case assigned</div>
-      <div class="case-select">
-        ${R.cases.map(c => `<span class="chip ${g.caseId === c.id ? 'active' : ''}" data-case="${c.id}">${esc(c.name)}</span>`).join('')}
+    <div class="dim-card r2-behaviorals-card">
+      <div class="dim-head">
+        <h4>Behavioral questions — choose 1–2</h4>
+        <span class="n" id="r2BehavioralCount">${esc(r2SelectedCountHtml(selected))}</span>
+      </div>
+      <div class="dim-body">
+        <div class="sub r2-bq-hint">Click a title to expand it, select it, and take notes. Clicking an open question keeps it selected. Usually 1–2; more is allowed.</div>
+        <div id="r2BehavioralList" class="r2-bq-list">
+          ${qs.map(function (q) { return r2BehavioralRowHtml(q, g, selected); }).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="dim-card r2-case-card">
+      <div class="dim-head"><h4>Case review</h4>${r2ScorePill(g.caseScore)}</div>
+      <div class="dim-body">
+        <div class="field-label">Instructions</div>
+        <div class="r2-case-instructions">${esc(r2CaseInstructionsText())}</div>
+        <div class="field-label" style="margin-top:12px;">Case assigned</div>
+        <div class="case-select">
+          ${R.cases.map(c => `<span class="chip ${g.caseId === c.id ? 'active' : ''}" data-case="${c.id}">${esc(c.name)}</span>`).join('')}
+        </div>
+        <div class="field-label" style="margin-top:12px;">Overall case score</div>
+        <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
+          ${['1', '2', '3', '4'].map(function (k) {
+            const n = Number(k);
+            const crit = R2_BEHAVIORAL_BANDS[n] || {};
+            return `<div class="band-opt ${g.caseScore === n ? 'sel' : ''}" data-key="caseScore" data-val="${k}"><span class="sc">${k}</span>${esc(crit.label || '')}</div>`;
+          }).join('')}
+        </div>
+        <div class="field-label">Case notes</div>
+        <div class="notes-field"><textarea id="r2CaseNotes" data-notekey="__case" placeholder="Walkthrough notes, standout moments, gaps…">${esc(g.caseNotes || '')}</textarea></div>
       </div>
     </div>
     ${R.dims.map(d => `
       <div class="dim-card">
-        <div class="dim-head"><h4>${esc(d.label)}</h4><span class="score-pill ${g.scores[d.key] ? '' : 'none'}">${g.scores[d.key] || '—'}</span></div>
+        <div class="dim-head"><h4>${esc(d.label)}</h4>${r2ScorePill(g.scores[d.key])}</div>
         <div class="dim-body">
           <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
             ${d.levels.map((txt, i) => { const val = 4 - i; return `<div class="band-opt ${g.scores[d.key] === val ? 'sel' : ''}" data-key="${d.key}" data-val="${val}"><span class="sc">${R.levelLabels[i]}</span>${esc(txt)}</div>`; }).join('')}
@@ -4162,9 +4557,9 @@ function renderRound2Grade(a, g) {
       </div>
     `).join('')}
     <div class="dim-card">
-      <div class="dim-head draft"><h4>${esc(R.fitDim.label)}</h4><span class="score-pill ${g.scores[R.fitDim.key] ? '' : 'none'}">${g.scores[R.fitDim.key] || '—'}</span></div>
+      <div class="dim-head draft"><h4>${esc(R.fitDim.label)}</h4>${r2ScorePill(g.scores[R.fitDim.key])}</div>
       <div class="dim-body">
-        <div class="sub" style="color:var(--warn); margin-bottom:8px;">No official rubric was on file for the behavioral half of the final round — this is a draft dimension. Edit or remove it once you and the team settle on final-round behavioral criteria.</div>
+        <div class="sub" style="color:var(--warn); margin-bottom:8px;">No official rubric was on file for the behavioral half of the final round — this is a draft dimension kept so last year's scores stay attached.</div>
         <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
           ${R.fitDim.levels.map((txt, i) => { const val = 4 - i; return `<div class="band-opt ${g.scores[R.fitDim.key] === val ? 'sel' : ''}" data-key="${R.fitDim.key}" data-val="${val}"><span class="sc">${R.levelLabels[i]}</span>${esc(txt)}</div>`; }).join('')}
         </div>
@@ -4177,25 +4572,35 @@ function renderRound2Grade(a, g) {
       </div>
       <label class="flag-row"><input type="checkbox" id="flagSecond2" ${g.flagSecond ? 'checked' : ''}> Flag for second reviewer</label>
       <div class="field-label">Interviewer notes</div>
-      <div class="notes-field"><textarea data-notekey="__main" placeholder="Case walkthrough notes, standout moments…">${esc(g.notes || '')}</textarea></div>
+      <div class="notes-field"><textarea data-notekey="__main" placeholder="Anything else worth flagging…">${esc(g.notes || '')}</textarea></div>
     </div>
   `;
-  main.querySelectorAll('.band-opt').forEach(el => el.addEventListener('click', () => {
-    const key = el.dataset.key, val = Number(el.dataset.val);
-    g.scores[key] = g.scores[key] === val ? undefined : val;
-    saveGrade('round2', a.id, 'score', key, g.scores[key]);
-    renderRound2Grade(a, g); updateHeaderScore('round2', g);
-  }));
+  bindR2BandOpts(main, a);
+  main.querySelectorAll('.r2-bq').forEach(function (row) { bindR2BehavioralRow(row, a); });
   main.querySelectorAll('[data-case]').forEach(el => el.addEventListener('click', () => {
-    g.caseId = g.caseId === el.dataset.case ? undefined : el.dataset.case;
-    saveGrade('round2', a.id, 'caseId', null, g.caseId); renderRound2Grade(a, g);
+    captureOpenR2Fields();
+    const rec = getGrade('round2', a.id);
+    rec.caseId = rec.caseId === el.dataset.case ? undefined : el.dataset.case;
+    saveGrade('round2', a.id, 'caseId', null, rec.caseId);
+    main.querySelectorAll('[data-case]').forEach(function (chip) {
+      chip.classList.toggle('active', rec.caseId === chip.dataset.case);
+    });
   }));
   main.querySelectorAll('[data-rec]').forEach(el => el.addEventListener('click', () => {
-    g.recommendation = g.recommendation === el.dataset.rec ? undefined : el.dataset.rec;
-    saveGrade('round2', a.id, 'recommendation', null, g.recommendation); renderRound2Grade(a, g);
+    captureOpenR2Fields();
+    const rec = getGrade('round2', a.id);
+    rec.recommendation = rec.recommendation === el.dataset.rec ? undefined : el.dataset.rec;
+    saveGrade('round2', a.id, 'recommendation', null, rec.recommendation);
+    main.querySelectorAll('[data-rec]').forEach(function (chip) {
+      chip.classList.toggle('active', rec.recommendation === chip.dataset.rec);
+    });
   }));
   const flagBox = document.getElementById('flagSecond2');
-  if (flagBox) flagBox.addEventListener('change', () => { g.flagSecond = flagBox.checked; saveGrade('round2', a.id, 'flagSecond', null, g.flagSecond); });
+  if (flagBox) flagBox.addEventListener('change', () => {
+    const rec = getGrade('round2', a.id);
+    rec.flagSecond = flagBox.checked;
+    saveGrade('round2', a.id, 'flagSecond', null, rec.flagSecond);
+  });
   bindNotesFields(main, 'round2', a.id);
 }
 
@@ -4492,12 +4897,16 @@ function buildCsv(round) {
       return [a.name, a.email, interviewerName(g.interviewer) || '', g.interviewTime || '', g.initialNotes || '', g.thankYou ? 'Yes' : 'No', g.knowFlag ? 'Yes' : '', g.scores.fit0 ?? '', g.scores.fit1 ?? '', g.scores.fit2 ?? '', g.scores.personal1 ?? '', g.scores.personal2 ?? '', g.scores.personality ?? '', r1raw ?? '', r1std == null ? '' : +r1std.toFixed(3), r1blend == null ? '' : +r1blend.toFixed(3), raw ?? '', std == null ? '' : +std.toFixed(3), g.recommendation || '', g.notes || ''];
     });
   } else {
-    header = ['Candidate (First & Last) Name', 'Case Assigned', 'Introduction', 'Framework', 'Market Sizing', 'Quant Reasoning', 'Brainstorming', 'Recommendation Dim', 'Fit & Communication', 'Final Grade / 24', 'Recommendation', 'Interviewer Notes'];
+    header = ['Candidate (First & Last) Name', 'Case Assigned', 'Introduction', 'Framework', 'Market Sizing', 'Quant Reasoning', 'Brainstorming', 'Recommendation Dim', 'Fit & Communication', 'Final Grade / 24', 'Behaviorals asked', 'Case overall', 'Recommendation', 'Interviewer Notes'];
     rows = poolForRound('round2').map(a => {
       const g = STATE.grades.round2[a.id] || { scores: {} };
       const caseObj = B.rubrics.round2.cases.find(c => c.id === g.caseId);
       const r = round2Total(g);
-      return [a.name, caseObj ? caseObj.name : '', g.scores.introduction ?? '', g.scores.framework ?? '', g.scores.market_sizing ?? '', g.scores.quant_reasoning ?? '', g.scores.brainstorming ?? '', g.scores.recommendation ?? '', g.scores.fit_communication ?? '', r ? r.total : '', g.recommendation || '', g.notes || ''];
+      const asked = r2BehavioralSelected(g).map(function (id) {
+        const q = r2BehavioralById(id);
+        return (q ? q.title : id) + (typeof g.scores[id] === 'number' ? ' ' + g.scores[id] : '');
+      }).join(' | ');
+      return [a.name, caseObj ? caseObj.name : '', g.scores.introduction ?? '', g.scores.framework ?? '', g.scores.market_sizing ?? '', g.scores.quant_reasoning ?? '', g.scores.brainstorming ?? '', g.scores.recommendation ?? '', g.scores.fit_communication ?? '', r ? r.total : '', asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
     });
   }
   const csv = [header, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
