@@ -354,9 +354,9 @@ def rubric_round1(round1_q):
 def rubric_round2():
     return {
         'cases': [
-            {'id': 'golden_taco', 'name': 'Golden Taco', 'industry': 'Food & Beverage'},
-            {'id': 'bean_bloom', 'name': 'Bean & Bloom', 'industry': 'Food & Beverage'},
-            {'id': 'pedal_pure', 'name': 'Pedal Pure', 'industry': 'Retail / Consumer'},
+            {'id': 'golden_taco', 'name': 'Golden Taco', 'industry': 'Food & Beverage', 'badge': 'Fox · Case 1'},
+            {'id': 'bean_bloom', 'name': 'Bean & Bloom', 'industry': 'Food & Beverage', 'badge': 'Fox · Case 2'},
+            {'id': 'pedal_pure', 'name': 'Pedal Pure', 'industry': 'Retail / Consumer', 'badge': 'Fox · Case 3'},
         ],
         'dims': [
             {'key': 'introduction', 'label': 'Introduction', 'levels': [
@@ -415,10 +415,11 @@ def rubric_round2():
             {'id': 'what-animal', 'title': 'What animal', 'q': 'If you could be an animal, what animal would you be?'},
         ],
         'caseInstructions': (
-            'Run the case first, then ask 1–2 behaviorals from the list (more is fine). '
-            'Score each case dimension 1–4 using the bands on the cards: 1 Unacceptable · '
-            '2 Not a good fit but showing promise · 3 Satisfactory fit · 4 Exceeding Expectations. '
-            'Paste the official case prompt here when it is sent — last year cases were numbered 1–5.'
+            'Fox versions of the three approved Fall 2026 cases. Click a case to expand it, '
+            'select it, and run from the interviewer guide. Weight rigor to the role '
+            '(Team Lead / Strategist / Junior Strategist). Play the business owner — do not '
+            'name the three issues; let the candidate dig them out. Run the case first, then '
+            '1–2 behaviorals. Score each dimension 1–4.'
         ),
     }
 

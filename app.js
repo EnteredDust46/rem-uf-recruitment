@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-behaviorals-20260913';
+const BUILD_STAMP = 'rd2-fox-cases-20260914';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -213,10 +213,314 @@ const R2_BEHAVIORAL_BANDS = {
   3: { label: 'Satisfactory fit', text: 'Offers a thoughtful answer that demonstrates some self-awareness and a willingness to grow.' },
   4: { label: 'Exceeding Expectations', text: 'Provides a detailed, introspective answer showing strong self-awareness and a clear point of view.' },
 };
-const R2_CASE_INSTRUCTIONS = 'Run the case first, then ask 1–2 behaviorals from the list (more is fine). Score each case dimension 1–4 using the bands on the cards: 1 Unacceptable · 2 Not a good fit but showing promise · 3 Satisfactory fit · 4 Exceeding Expectations. Paste the official case prompt here when it is sent — last year cases were numbered 1–5.';
+const R2_CASE_INSTRUCTIONS = 'Fox versions of the three approved Fall 2026 cases. Click a case to expand it, select it, and run from the interviewer guide. Weight rigor to the role (Team Lead / Strategist / Junior Strategist). Play the business owner — do not name the three issues; let the candidate dig them out. Run the case first, then 1–2 behaviorals. Score each dimension 1–4.';
+
+// Fox interviewer guides (doc "UF FL2026 Problem Solving (Case) Interview Guide").
+// Stable ids match last year's chips so already-saved caseId values still highlight.
+const R2_CASE_FALLBACK = [
+  {
+    id: 'golden_taco',
+    name: 'Golden Taco',
+    title: 'Golden Taco',
+    badge: 'Fox · Case 1',
+    industry: 'Food & Beverage',
+    opening: {
+      tailor: [
+        'Weight rigor to the role. Higher-responsibility roles carry more client-facing weight.',
+        'Team Lead: conceptualize ideas well and communicate them clearly.',
+        'Strategist: ask ample clarifying questions to identify the objective.',
+        'Junior Strategist: inquisitive mind and eagerness to learn.',
+      ],
+      hello: 'I’ve heard such great things from my counterpart, ________. I’d love for you to briefly tell me a bit about yourself and why you’re interested in Rem before we get into the problem-solving portion.',
+      q1: 'What are some of the issues you’ve been seeing facing the small business community?',
+      transition: 'Over the next few minutes, you’ll hear the story of a struggling business owner. As a potential member of our chapter, you’ll need to identify the problems at hand, ask questions to inform your recommendation, and propose impactful, implementable solutions. I’ll play the business owner; you’ll play a member of Rem.',
+      note: 'Adopt a fixed persona and stick to it. Don’t state the problems outright — let the candidate dig them out with questions.',
+    },
+    about: 'Golden Taco is a cottage food business founded by Carlos and Maya, a married couple from Austin and Mexico City, selling street food at markets and local events in College Heights. Known for tacos, they’re considering a new item — Golden Bowls (same fillings, plus rice and seasonal toppings) — and want help deciding whether to launch it, and how to price and promote it.',
+    facts: [
+      'Based in College Heights (urban college town)',
+      'Founded 2019, married family-owned operation',
+      '10 employees (5 kitchen, 5 front-of-house)',
+      'Marketing: word-of-mouth + website only, no social media',
+      'Long-term goal: second location within 2 years',
+    ],
+    ifAsked: [
+      { q: 'Cottage food business?', a: 'Operates from a home kitchen, sells direct to customers, no commercial kitchen.' },
+      { q: 'How are current tacos doing?', a: 'Profitable and stable; owners want a new revenue stream.' },
+      { q: 'Target market?', a: 'College students and young professionals.' },
+      { q: 'Why launch the bowl?', a: 'Profitability and product line expansion.' },
+      { q: 'Bowl ingredients?', a: 'Beef or chicken, rice, cheese, avocado, seasonal vegetables; veggie option swaps meat for grilled squash and peppers.' },
+      { q: 'Bowl vs. taco?', a: 'Same core fillings, served in a bowl with rice and veggies instead of a tortilla.' },
+    ],
+    issues: [
+      'Launch strategy for Golden Bowl (sourcing, prep, menu integration)',
+      'Pricing and financial feasibility',
+      'Marketing and communication plan, especially for younger customers',
+    ],
+    steers: [
+      { when: 'They lead with marketing', say: 'A strong, clear introduction to our new product is definitely important — we’ve had some issues communicating it. How do you think you can help with this?' },
+      { when: 'They lead with finances', say: 'Product financials is a good start. How do you recommend breaking the price down?' },
+    ],
+    explore: [
+      { label: 'Company / market', items: ['How does this fit Golden Taco’s brand?', 'How are competitors positioning similar products?', 'Does this help differentiate in a saturated market?'] },
+      { label: 'Financial', items: ['What drives cost differences between bowls and tacos?', 'New ingredients vs. existing ones?', 'Impact on food waste?'] },
+      { label: 'Customer', items: ['Rising demand for bowls?', 'Attract health-conscious customers?', 'Market as customizable / trendy?', 'Combos or loyalty incentives to drive trial?'] },
+    ],
+    quantIntro: 'I’m loving your ideas so far. Let’s calculate the profitability and the margin of the different Golden Bowls versus tacos.',
+    exhibitNote: 'Allow them to pick a path. Path A is faster (profit dollars per item). Path B builds revenue then cost. Either way, get to $50,000 total bowl profit and a 66.7% margin before tacos.',
+    exhibitHeaders: ['Product', 'Cost to Make', 'Sales Price', 'Units Sold (per week)'],
+    exhibitRows: [
+      ['Beef Golden Bowl', '$3', '$10', '100'],
+      ['Chicken Golden Bowl', '$2', '$5', '50'],
+      ['Veggie Golden Bowl', '$2', '$5', '50'],
+      ['Average Taco', '$1', '$4', '800'],
+    ],
+    exhibitFoot: 'Golden Taco operates 50 weeks per year (2 weeks off).',
+    quant: [
+      {
+        title: 'Path A — profit dollars per item',
+        say: 'Volume × profit-per-unit × weeks. Skip separate revenue/cost totals.',
+        answers: [
+          'Beef: 100 × ($10 − $3) × 50 = $35,000',
+          'Chicken: 50 × ($5 − $2) × 50 = $7,500',
+          'Veggie: 50 × ($5 − $2) × 50 = $7,500',
+          'Total bowl profit = $50,000',
+        ],
+      },
+      {
+        title: 'Path B — revenue, then cost',
+        say: 'Build annual revenue, then annual cost, then margin.',
+        answers: [
+          'Revenue: Beef $50,000 + Chicken $12,500 + Veggie $12,500 = $75,000',
+          'Cost: Beef $15,000 + Chicken $5,000 + Veggie $5,000 = $25,000',
+          'Profit = $75,000 − $25,000 = $50,000',
+          'Margin = $50,000 ÷ $75,000 = 66.7%',
+        ],
+      },
+      {
+        title: 'Tacos — then compare',
+        say: 'Ask them to calculate taco revenue and margin, then compare if they do not do it themselves.',
+        answers: [
+          'Revenue = 800 × $4 × 50 = $160,000',
+          'Cost = 800 × $1 × 50 = $40,000',
+          'Profit = $120,000',
+          'Margin = $120,000 ÷ $160,000 = 75%',
+        ],
+        note: 'Expected insight: bowls are less profitable per dollar, but may still be worth it if they expand the customer base rather than cannibalize taco sales.',
+      },
+    ],
+    brainstorm: {
+      say: 'Let’s shift gears. What are some ways Golden Taco could expand its network and create new connections to support this launch?',
+      hints: 'Let them generate 2–3 ideas. Areas they might touch: local partnerships (colleges, farmers markets, food trucks), social media presence (currently none), loyalty/referral programs, cross-promotion with other College Heights businesses, catering or campus events.',
+    },
+    conclusion: {
+      say: 'Now that you’ve looked at the numbers and brainstormed some ideas, what’s your final recommendation? Should Golden Taco launch the Golden Bowl, and under what conditions?',
+      expected: [
+        'Bowls are less profitable than tacos (67% vs. 75%).',
+        'Real cannibalization risk — bowls only make sense if they pull in new customers, not just shift existing ones.',
+        'Set conditions: clear marketing push (especially social, since there is currently none), avoid heavy menu overlap with tacos, consider premium positioning to protect margin.',
+      ],
+    },
+  },
+  {
+    id: 'bean_bloom',
+    name: 'Bean & Bloom',
+    title: 'Bean & Bloom',
+    badge: 'Fox · Case 2',
+    industry: 'Food & Beverage',
+    opening: {
+      tailor: [
+        'Weight rigor to the role. Higher-responsibility roles carry more client-facing weight.',
+        'Team Lead: conceptualize ideas well and communicate them clearly.',
+        'Strategist: ask ample clarifying questions to identify the objective.',
+        'Junior Strategist: inquisitive mind and eagerness to learn.',
+      ],
+      hello: 'I’ve heard such great things from my counterpart, ________. I’d love for you to briefly tell me a bit about yourself and why you’re interested in Rem before we get into the problem-solving portion.',
+      q1: 'What are some of the issues you’ve been seeing facing the small business community?',
+      transition: 'Over the next few minutes, you’ll hear the story of a struggling business owner. As a potential member of our chapter, you’ll need to identify the problems at hand, ask questions to inform your recommendation, and propose impactful, implementable solutions. I’ll play the business owner; you’ll play a member of Rem.',
+      note: 'Adopt a fixed persona and stick to it. Don’t state the problems outright — let the candidate dig them out with questions.',
+    },
+    about: 'Bean & Bloom is a specialty coffee shop founded by friends Jasmine and Aiden in 2020, in Riverbend, a trendy riverside neighborhood with young professionals and college students. Known for artisan lattes, locally sourced pastries, and a cozy aesthetic, they’re now considering a new product line — Cold Brew Growlers (64 oz take-home bottles) — and want help deciding whether to launch it, and how to price and promote it.',
+    facts: [
+      'Based in Riverbend (hip neighborhood, lots of foot traffic and remote workers)',
+      'Founded 2020, both founders single and fully focused on the business',
+      '8 employees (4 baristas, 4 kitchen/front-of-house)',
+      'Marketing: strong Instagram/TikTok following, plus word-of-mouth from regulars',
+      'Long-term goal: second shop or mobile coffee cart within 2 years',
+    ],
+    ifAsked: [
+      { q: 'What is a Cold Brew Growler?', a: 'A 64 oz bottle of house-made cold brew for take-home use; holds about 6–7 servings.' },
+      { q: 'How is the current menu doing?', a: 'Lattes, cappuccinos, and pastries are profitable and stable; owners want a revenue boost that doesn’t depend solely on foot traffic.' },
+      { q: 'Target market?', a: 'Young professionals, grad students, remote workers — people into coffee culture and convenience.' },
+      { q: 'Why launch growlers?', a: 'Diversify revenue, reach remote workers who brew at home, build brand presence outside the café.' },
+      { q: 'Ingredients?', a: 'Cold brew concentrate, filtered water, premium beans from local roasters.' },
+      { q: 'Growler vs. in-store drink?', a: 'Take-home, sold in bulk, priced at a premium over individual iced coffees.' },
+    ],
+    issues: [
+      'Launch strategy for growlers (production process, shelf life, in-store only or delivery)',
+      'Pricing and financial feasibility (are margins sustainable given bean costs?)',
+      'Marketing strategy (positioning against grocery-store cold brew and Starbucks bottled drinks)',
+    ],
+    steers: [
+      { when: 'They lead with marketing', say: 'We’ve had trouble explaining how our growler is different from what you could get in a grocery store. How would you help us communicate that?' },
+      { when: 'They lead with finances', say: 'Pricing is something we’re wrestling with. How would you suggest breaking down the costs and setting the right retail price?' },
+    ],
+    explore: [
+      { label: 'Company / market', items: ['Fit with artisan, community-focused image?', 'How are cafés, grocery stores, and Starbucks positioning similar products?', 'Would this help them stand out in a saturated market?'] },
+      { label: 'Financial', items: ['Cost differences vs. lattes (beans, bottles, labeling, storage)?', 'Existing cold brew concentrate or new inputs?', 'Cut waste or add packaging cost?'] },
+      { label: 'Customer', items: ['Rising demand for bulk at-home coffee?', 'Attract remote workers or buyers cutting daily café trips?', 'Premium or eco-friendly (refill program)?', 'Promotions or loyalty discounts to drive trial?'] },
+    ],
+    quantIntro: 'Bean & Bloom is considering selling 64 oz cold brew growlers. Each growler costs $12. Refills would be $9. The café estimates each growler lasts a customer about 4 cups of coffee. Currently, an iced cold brew costs $4 per cup.',
+    exhibitNote: 'Read the cost structure aloud with the prompt.',
+    exhibitHeaders: ['Item', 'Amount'],
+    exhibitRows: [
+      ['Ingredient cost per cup', '$1.00'],
+      ['Ingredient cost per growler (64 oz = 4 cups)', '$3.50'],
+      ['Packaging cost per growler', '$1.50'],
+      ['Total growler cost', '$5.00'],
+    ],
+    exhibitFoot: 'Growler $12 · refill $9 · iced cold brew $4/cup. Prompt uses 4 cups per growler for the math (intro also says 6–7 servings).',
+    quant: [
+      {
+        title: 'Margin — growler vs. 4 cups',
+        say: 'What’s the margin on a single growler vs. 4 individual cold brews?',
+        answers: [
+          '4 cups: $16 − $4 = $12 profit (75% margin)',
+          'Growler: $12 − $5 = $7 profit (58% margin)',
+        ],
+        note: 'Candidate should catch that growlers are less profitable per serving but may increase volume and loyalty.',
+      },
+      {
+        title: 'Switching / break-even',
+        say: 'Suppose 100 cold brew customers per week switch from individual cups to growlers. What’s the impact on profit?',
+        answers: [
+          '100 × $12 = $1,200 (keep cups)',
+          '100 × $7 = $700 (switch to growlers)',
+          'Net loss = $500/week if existing customers switch entirely',
+        ],
+        note: 'Push them to target new customers or incremental sales, not cannibalize current ones.',
+      },
+    ],
+    brainstorm: {
+      say: 'Let’s shift gears. What are some ways Bean & Bloom could expand its network and create new connections to support this launch?',
+      hints: 'Let them generate 2–3 ideas. Areas they might touch: partnerships with gyms, yoga studios, or coworking spaces; pop-up stands at farmers markets, campus fairs, or festivals; corporate or small-office catering; a subscription or refill program; collaborations with nearby bakeries or restaurants; community events like coffee tastings or latte-art workshops.',
+    },
+    conclusion: {
+      say: 'Now that you’ve looked at the numbers and brainstormed some ideas, what’s your final recommendation? Should Bean & Bloom launch the Cold Brew Growler, and under what conditions?',
+      expected: [
+        'Growlers are less profitable than core cups (58% vs. 75%).',
+        'Real cannibalization risk — growlers only make sense if they pull in new occasions (at-home, remote work) rather than replacing café visits.',
+        'Set conditions: position clearly against grocery-store and Starbucks bottled cold brew, lean on the strong social following to market the take-home angle, and consider a refill/subscription program to build recurring revenue.',
+        'Score on attention to detail, quality of clarifying questions, and whether the recommendation is tactical and specific.',
+      ],
+    },
+  },
+  {
+    id: 'pedal_pure',
+    name: 'Pedal Pure',
+    title: 'PedalPure',
+    badge: 'Fox · Case 3',
+    industry: 'Retail / Consumer',
+    opening: {
+      tailor: [
+        'Weight rigor to the role. Higher-responsibility roles carry more client-facing weight.',
+        'Team Lead: conceptualize ideas well and communicate them clearly.',
+        'Strategist: ask ample clarifying questions to identify the objective.',
+        'Junior Strategist: inquisitive mind and eagerness to learn.',
+      ],
+      hello: 'I’ve heard such great things from my counterpart, ________. I’d love for you to briefly tell me a bit about yourself and why you’re interested in Rem before we get into the problem-solving portion.',
+      q1: 'What are some of the issues you’ve been seeing facing the small business community?',
+      transition: 'Over the next few minutes, you’ll hear the story of a struggling business owner. As a potential member of our chapter, you’ll need to identify the problems at hand, ask questions to inform your recommendation, and propose impactful, implementable solutions. I’ll play the business owner; you’ll play a member of Rem.',
+      note: 'Adopt a fixed persona and stick to it. Don’t state the problems outright — let the candidate dig them out with questions.',
+    },
+    about: 'PedalPure is a boutique indoor cycling studio founded by sisters Maya and Lila in 2021, in Brookdale, a neighborhood with a growing population of young professionals. Known for community-focused classes, energetic instructors, and a wellness-driven brand, they’re now considering a new product line — in-studio bottled electrolyte drinks (“PedalPure Recovery”) for post-class recovery — and want help deciding whether to launch it, and how to price and promote it.',
+    facts: [
+      'Based in Brookdale (trendy, fitness-minded neighborhood)',
+      'Founded 2021, both founders married, business is their shared focus',
+      '12 part-time instructors, 3 front-desk staff',
+      'Marketing: instructor-led Instagram/TikTok reels, client testimonials, referral discounts',
+      'Long-term goal: full wellness brand — merchandise, nutrition products, possibly a second studio',
+    ],
+    ifAsked: [
+      { q: 'What is the product?', a: 'A bottled electrolyte drink, branded “PedalPure Recovery,” sold cold after class.' },
+      { q: 'How is the current business doing?', a: 'Classes are often full with a loyal community, but revenue depends almost entirely on class fees.' },
+      { q: 'Target market?', a: 'Fitness-conscious young professionals and students wanting convenient, healthy recovery drinks.' },
+      { q: 'Why launch bottled drinks?', a: 'Diversify revenue, add a wellness product, capture spend that currently goes to nearby smoothie shops.' },
+      { q: 'Ingredients?', a: 'Electrolytes, natural fruit extracts, spring water, no artificial sweeteners.' },
+      { q: 'Differentiation?', a: 'Premium, wellness-branded, sold in-studio post-class for convenience.' },
+    ],
+    issues: [
+      'Launch strategy (production, storage, distribution — in-studio only or expand to local gyms?)',
+      'Pricing and financial feasibility (are margins competitive vs. alternatives?)',
+      'Marketing strategy (positioning against Gatorade, BodyArmor, and local smoothie shops)',
+    ],
+    steers: [
+      { when: 'They lead with marketing', say: 'We’ve had trouble explaining how our bottled drink is different from what you could get at a grocery store. How would you help us communicate that?' },
+      { when: 'They lead with finances', say: 'Pricing is something we’re wrestling with. How would you suggest breaking down the costs and setting the right retail price?' },
+    ],
+    explore: [
+      { label: 'Company / market', items: ['Fit with premium, wellness-focused image?', 'How are local smoothie cafés, Gatorade, and BodyArmor positioning similar products?', 'Stand out as a lifestyle brand rather than just a studio?'] },
+      { label: 'Financial', items: ['Cost drivers (ingredients, bottles, refrigeration, storage)?', 'Existing suppliers or new ones?', 'Does bulk ordering cut costs, or does storage add constraints?'] },
+      { label: 'Customer', items: ['Rising demand for “clean” wellness products?', 'Existing members vs. retail customers?', 'Premium, customizable flavors, or eco-friendly bottles?', 'Bundles, subscriptions, or loyalty discounts?'] },
+    ],
+    quantIntro: 'I’m loving your ideas so far. Each PedalPure Recovery drink costs $2.25 to make. Sold à la carte after class, it’s $6. We’re also considering bundling it into the class price for $5 instead.',
+    exhibitNote: 'Ask what the margin is per option, then walk the switching and capacity steps.',
+    exhibitHeaders: ['Option', 'Price', 'Cost', 'Profit / unit'],
+    exhibitRows: [
+      ['À la carte', '$6', '$2.25', '$3.75'],
+      ['Class bundle', '$5', '$2.25', '$2.75'],
+    ],
+    exhibitFoot: 'Fridge holds 2,400 bottles/month. 500 active members × 2 drinks/week = 4,000 bottles/month of potential demand.',
+    quant: [
+      {
+        title: 'Margin per option',
+        say: 'Ask what margin is per option.',
+        answers: [
+          'À la carte: ($6 − $2.25) ÷ $6 = 62.5%',
+          'Bundle: ($5 − $2.25) ÷ $5 = 55%',
+        ],
+        note: 'Follow-up: the bundle runs a lower margin. What’s missing — why might they offer it anyway? Push toward volume and guaranteed attach rate.',
+      },
+      {
+        title: 'Switching scenario',
+        say: 'Suppose 300 members take the class bundle once a week instead of buying a drink à la carte. What’s the impact on weekly profit?',
+        answers: [
+          'À la carte: 300 × $3.75 = $1,125/week',
+          'Bundle: 300 × $2.75 = $825/week',
+          'Net loss = $300/week if existing à la carte buyers switch entirely',
+        ],
+        note: 'The bundle only makes sense if it drives incremental purchases (members who weren’t buying a drink), not if it just discounts sales already happening.',
+      },
+      {
+        title: 'Capacity constraint',
+        say: 'PedalPure has 500 active members. If each member who buys drinks does so at an average of 2 per week, that’s 4,000 bottles a month of potential demand. But the studio’s fridge only holds 2,400 bottles a month. What’s the lost revenue and profit from that constraint?',
+        answers: [
+          'Lost sales = 4,000 − 2,400 = 1,600 bottles/month',
+          'Lost revenue = 1,600 × $6 = $9,600/month',
+          'Lost profit = 1,600 × $3.75 = $6,000/month',
+        ],
+        note: 'Follow-up: what are PedalPure’s options? (More storage, more frequent delivery, cap sales.) Bundle is less profitable per drink and risks cannibalizing full-price sales, but can still work as a trial / loyalty tool for members who would not otherwise buy.',
+      },
+    ],
+    brainstorm: {
+      say: 'Let’s shift gears. What are some ways PedalPure could expand its network and create new connections to support this launch?',
+      hints: 'Let them generate 2–3 ideas. Areas they might touch: partnerships with local gyms, yoga studios, or wellness centers; sampling booths at community 5Ks or charity rides; corporate wellness (drinks for office gyms); collaborations with nutritionists or local cafés; hosting recovery workshops or wellness events.',
+    },
+    conclusion: {
+      say: 'Now that you’ve looked at the numbers and brainstormed some ideas, what’s your final recommendation? Should PedalPure launch the bottled electrolyte drink, and under what conditions?',
+      expected: [
+        'The bundle is less profitable than à la carte (55% vs. 62.5%).',
+        'Real cannibalization risk — the bundle only makes sense if it drives incremental drink purchases.',
+        'Set conditions: position as a premium wellness product against Gatorade/BodyArmor and local smoothie shops; keep the bundle targeted (new members or specific class times) rather than opening it to everyone; protect à la carte pricing as the primary revenue driver.',
+      ],
+    },
+  },
+];
 
 const r2BehavioralHolds = {};
 const R2_BEHAVIORAL_HOLD_MS = 30000;
+const r2CaseHolds = {};
+const R2_CASE_HOLD_MS = 30000;
 
 function r2BehavioralList() {
   const fromB = B.rubrics && B.rubrics.round2 && B.rubrics.round2.behaviorals;
@@ -269,10 +573,73 @@ function hasPendingR2BehavioralOp() {
   });
 }
 
+function hasPendingR2CaseOp() {
+  return pendingOps().some(function (op) {
+    return op && op.kind === 'grade' && op.round === 'round2' && op.field === 'caseId';
+  });
+}
+
+function r2CaseList() {
+  const fb = {};
+  R2_CASE_FALLBACK.forEach(function (c) { fb[c.id] = c; });
+  const fromB = B.rubrics && B.rubrics.round2 && B.rubrics.round2.cases;
+  if (fromB && fromB.length) {
+    const out = [];
+    fromB.forEach(function (c) {
+      const full = fb[c.id];
+      if (full) out.push(Object.assign({}, full, { name: c.name || full.name }));
+    });
+    if (out.length) return out;
+  }
+  return R2_CASE_FALLBACK;
+}
+
+function r2CaseById(id) {
+  const list = r2CaseList();
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].id === id) return list[i];
+  }
+  return null;
+}
+
+function r2KnownCaseId(id) {
+  return !!r2CaseById(id);
+}
+
+function normalizeCaseId(v) {
+  if (!v) return '';
+  return r2KnownCaseId(v) ? String(v) : '';
+}
+
+function holdR2Case(id, caseId) {
+  if (!id) return;
+  r2CaseHolds[id] = { caseId: caseId ? String(caseId) : '', until: Date.now() + R2_CASE_HOLD_MS };
+}
+
+function heldR2Case(id) {
+  const h = id ? r2CaseHolds[id] : null;
+  if (!h || Date.now() > h.until) return null;
+  return h.caseId;
+}
+
+function hasR2CaseHold(id) {
+  const h = id ? r2CaseHolds[id] : null;
+  return !!(h && Date.now() <= h.until);
+}
+
+function r2SelectedCaseId(g) {
+  if (g && STATE.currentApplicantId && STATE.grades.round2[STATE.currentApplicantId] === g && hasR2CaseHold(STATE.currentApplicantId)) {
+    return heldR2Case(STATE.currentApplicantId) || '';
+  }
+  if (g && g.caseId && r2KnownCaseId(g.caseId)) return g.caseId;
+  return '';
+}
+
 function shouldHoldR2AgainstPoll() {
-  if (hasPendingR2BehavioralOp()) return true;
+  if (hasPendingR2BehavioralOp() || hasPendingR2CaseOp()) return true;
   if (STATE.view === 'grade' && STATE.gradeRound === 'round2' && STATE.currentApplicantId) {
     if (heldR2Behaviorals(STATE.currentApplicantId) != null) return true;
+    if (hasR2CaseHold(STATE.currentApplicantId)) return true;
   }
   return false;
 }
@@ -342,6 +709,13 @@ function keepLocalR2Behaviorals(prevR2) {
       incoming.caseNotes = old.caseNotes;
     }
     if (old && old.caseScore != null && incoming.caseScore == null) incoming.caseScore = old.caseScore;
+    if (hasR2CaseHold(id)) {
+      const heldCase = heldR2Case(id);
+      incoming.caseId = heldCase || undefined;
+    } else if (old && old.caseId && !incoming.caseId) {
+      incoming.caseId = old.caseId;
+    }
+    if (!incoming.scores || typeof incoming.scores !== 'object') incoming.scores = {};
     if (old && old.scores) incoming.scores = Object.assign({}, old.scores, incoming.scores);
   });
 }
@@ -492,6 +866,8 @@ function applyPendingOps() {
           } else {
             rec.behavioralSelected = [];
           }
+        } else if (op.field === 'caseId') {
+          rec.caseId = op.value ? String(op.value) : undefined;
         } else {
           rec[op.field] = op.value;
         }
@@ -627,6 +1003,10 @@ function saveGrade(round, applicantId, field, key, value) {
   if (field === 'behavioralSelected') {
     stored = normalizeBehavioralSelected(value);
     holdR2Behaviorals(applicantId, stored);
+  }
+  if (field === 'caseId') {
+    stored = value ? String(value) : null;
+    holdR2Case(applicantId, stored);
   }
   recordOp({ kind: 'grade', round: round, id: applicantId, field: field, key: key, value: stored });
   queueSave();
@@ -769,6 +1149,14 @@ function captureOpenR2Fields() {
   });
   const caseNotes = document.getElementById('r2CaseNotes');
   if (caseNotes) g.caseNotes = caseNotes.value;
+  if (hasR2CaseHold(STATE.currentApplicantId)) {
+    g.caseId = heldR2Case(STATE.currentApplicantId) || undefined;
+  } else {
+    const openCase = main.querySelector('.r2-case.open[data-case]');
+    if (openCase && openCase.dataset.case && r2KnownCaseId(openCase.dataset.case)) {
+      g.caseId = openCase.dataset.case;
+    }
+  }
   const openIds = [];
   main.querySelectorAll('.r2-bq.open[data-bqid]').forEach(function (row) {
     if (row.dataset.bqid) openIds.push(row.dataset.bqid);
@@ -1319,8 +1707,9 @@ function round1Average(g) {
 
 function round2Total(g) {
   const dims = B.rubrics.round2.dims.map(d => d.key);
-  const vals = dims.map(k => g.scores[k]).filter(v => typeof v === 'number');
-  const fit = g.scores.fit_communication;
+  const scores = (g && g.scores) || {};
+  const vals = dims.map(k => scores[k]).filter(v => typeof v === 'number');
+  const fit = scores.fit_communication;
   const total = vals.reduce((a, b) => a + b, 0) + (typeof fit === 'number' ? fit : 0);
   const count = vals.length + (typeof fit === 'number' ? 1 : 0);
   if (!count) return null;
@@ -3345,6 +3734,7 @@ function applyLiveR2GradeUpdate() {
   if (!a || !main) return;
   const g = getGrade('round2', a.id);
   syncR2BehavioralRows(main, g, a);
+  syncR2CaseRows(main, g, a);
   const R = B.rubrics.round2;
   (R.dims || []).forEach(function (d) { updateR2ScoreUI(main, g, d.key); });
   if (R.fitDim) updateR2ScoreUI(main, g, R.fitDim.key);
@@ -4503,6 +4893,171 @@ function syncR2BehavioralRows(container, g, a) {
   });
 }
 
+function r2CaseListHtml(items) {
+  if (!items || !items.length) return '';
+  return '<ul class="r2-case-ul">' + items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+}
+
+function r2CaseTableHtml(headers, rows) {
+  if (!headers || !rows) return '';
+  return '<table class="r2-case-table"><thead><tr>' +
+    headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') +
+    '</tr></thead><tbody>' +
+    rows.map(function (row) {
+      return '<tr>' + row.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
+    }).join('') +
+    '</tbody></table>';
+}
+
+function r2CaseBodyHtml(c) {
+  const o = c.opening || {};
+  const steers = (c.steers || []).map(function (s) {
+    return '<div class="r2-case-steer"><div class="r2-case-when">' + esc(s.when) + '</div><div class="prompt">' + esc(s.say) + '</div></div>';
+  }).join('');
+  const asked = (c.ifAsked || []).map(function (row) {
+    return '<div class="r2-case-qa"><div class="r2-case-q">' + esc(row.q) + '</div><div class="r2-case-a">' + esc(row.a) + '</div></div>';
+  }).join('');
+  const explore = (c.explore || []).map(function (ex) {
+    return '<div class="r2-case-explore"><div class="r2-case-when">' + esc(ex.label) + '</div>' + r2CaseListHtml(ex.items) + '</div>';
+  }).join('');
+  const quant = (c.quant || []).map(function (step) {
+    return '<div class="r2-case-step">' +
+      '<div class="r2-case-step-h">' + esc(step.title) + '</div>' +
+      (step.say ? '<div class="read-aloud">Read aloud</div><div class="prompt">' + esc(step.say) + '</div>' : '') +
+      (step.answers && step.answers.length ? '<div class="r2-case-key"><div class="r2-case-when">What good looks like</div>' + r2CaseListHtml(step.answers) + '</div>' : '') +
+      (step.note ? '<div class="r2-case-note">' + esc(step.note) + '</div>' : '') +
+      '</div>';
+  }).join('');
+  return `<div class="r2-case-body">
+      <div class="r2-case-sec">
+        <h5>Opening</h5>
+        <div class="sub">${esc((o.tailor || []).join(' '))}</div>
+        <div class="read-aloud">Read aloud</div>
+        <div class="prompt">${esc(o.hello || '')}</div>
+        <div class="read-aloud">Read aloud</div>
+        <div class="prompt">${esc(o.q1 || '')}</div>
+        <div class="read-aloud">Read aloud</div>
+        <div class="prompt">${esc(o.transition || '')}</div>
+        ${o.note ? `<div class="r2-case-note">${esc(o.note)}</div>` : ''}
+      </div>
+      <div class="r2-case-sec">
+        <h5>Framework</h5>
+        <div class="prompt" style="font-size:15px;">${esc(c.about || '')}</div>
+        <div class="r2-case-when">Quick facts</div>
+        ${r2CaseListHtml(c.facts)}
+        <div class="r2-case-when">Give if asked</div>
+        ${asked}
+        <div class="r2-case-when">Steer toward these 3 issues — do not name them</div>
+        ${r2CaseListHtml(c.issues)}
+        ${steers}
+        ${explore ? '<div class="r2-case-when">They may also explore</div>' + explore : ''}
+      </div>
+      <div class="r2-case-sec">
+        <h5>Quant</h5>
+        <div class="read-aloud">Read aloud</div>
+        <div class="prompt">${esc(c.quantIntro || '')}</div>
+        ${c.exhibitNote ? `<div class="r2-case-note">${esc(c.exhibitNote)}</div>` : ''}
+        ${r2CaseTableHtml(c.exhibitHeaders, c.exhibitRows)}
+        ${c.exhibitFoot ? `<div class="r2-case-foot">${esc(c.exhibitFoot)}</div>` : ''}
+        ${quant}
+      </div>
+      <div class="r2-case-sec">
+        <h5>Brainstorm</h5>
+        <div class="read-aloud">Read aloud</div>
+        <div class="prompt">${esc((c.brainstorm && c.brainstorm.say) || '')}</div>
+        ${c.brainstorm && c.brainstorm.hints ? `<div class="r2-case-note">${esc(c.brainstorm.hints)}</div>` : ''}
+      </div>
+      <div class="r2-case-sec">
+        <h5>Recommendation</h5>
+        <div class="read-aloud">Read aloud</div>
+        <div class="prompt">${esc((c.conclusion && c.conclusion.say) || '')}</div>
+        <div class="r2-case-key">
+          <div class="r2-case-when">What good looks like</div>
+          ${r2CaseListHtml((c.conclusion && c.conclusion.expected) || [])}
+        </div>
+      </div>
+    </div>`;
+}
+
+function r2CaseRowHtml(c, selectedId) {
+  const open = selectedId === c.id;
+  return `<div class="r2-case${open ? ' open sel' : ''}" data-case="${esc(c.id)}">
+      <div class="r2-bq-bar">
+        <button type="button" class="r2-bq-title" data-case="${esc(c.id)}">
+          <span class="r2-bq-label">${esc(c.title || c.name)} <span class="r2-case-badge">${esc(c.badge || 'Fox')}</span></span>
+        </button>
+        ${open ? `<button type="button" class="r2-bq-clear" data-caseclear="${esc(c.id)}">Clear</button>` : ''}
+      </div>
+      ${open ? r2CaseBodyHtml(c) : ''}
+    </div>`;
+}
+
+function persistR2Case(a, caseId) {
+  const rec = getGrade('round2', a.id);
+  rec.caseId = caseId && r2KnownCaseId(caseId) ? caseId : undefined;
+  holdR2Case(a.id, rec.caseId);
+  if (rec.caseNotes) saveGrade('round2', a.id, 'caseNotes', null, rec.caseNotes);
+  saveGrade('round2', a.id, 'caseId', null, rec.caseId);
+  return rec;
+}
+
+function bindR2CaseRow(row, a) {
+  const title = row.querySelector('.r2-bq-title');
+  if (title && title.dataset.bound !== '1') {
+    title.dataset.bound = '1';
+    title.addEventListener('click', function (evt) {
+      if (evt) evt.stopPropagation();
+      captureOpenR2Fields();
+      const id = title.dataset.case;
+      if (!id) return;
+      persistR2Case(a, id);
+      syncR2CaseRows(document.getElementById('gradeMain'), getGrade('round2', a.id), a);
+    });
+  }
+  const clear = row.querySelector('.r2-bq-clear');
+  if (clear && clear.dataset.bound !== '1') {
+    clear.dataset.bound = '1';
+    clear.addEventListener('click', function (evt) {
+      if (evt) { evt.preventDefault(); evt.stopPropagation(); }
+      captureOpenR2Fields();
+      persistR2Case(a, '');
+      syncR2CaseRows(document.getElementById('gradeMain'), getGrade('round2', a.id), a);
+    });
+  }
+}
+
+function syncR2CaseRows(container, g, a) {
+  if (!container) return;
+  const selectedId = r2SelectedCaseId(g);
+  container.querySelectorAll('.r2-case[data-case]').forEach(function (row) {
+    const id = row.dataset.case;
+    const c = r2CaseById(id);
+    if (!c) return;
+    const shouldOpen = selectedId === id;
+    const isOpen = row.classList.contains('open');
+    const focused = row.contains(document.activeElement) && isEditingField();
+    if (shouldOpen && !isOpen) {
+      row.classList.add('open', 'sel');
+      if (!row.querySelector('.r2-case-body')) row.insertAdjacentHTML('beforeend', r2CaseBodyHtml(c));
+      const bar = row.querySelector('.r2-bq-bar');
+      if (bar && !bar.querySelector('.r2-bq-clear')) {
+        bar.insertAdjacentHTML('beforeend', `<button type="button" class="r2-bq-clear" data-caseclear="${esc(id)}">Clear</button>`);
+      }
+      bindR2CaseRow(row, a);
+    } else if (!shouldOpen && isOpen && !focused) {
+      row.classList.remove('open', 'sel');
+      const body = row.querySelector('.r2-case-body');
+      if (body) body.remove();
+      const clr = row.querySelector('.r2-bq-clear');
+      if (clr) clr.remove();
+    } else {
+      row.classList.toggle('sel', shouldOpen);
+      row.classList.toggle('open', shouldOpen || (isOpen && focused));
+    }
+    if (shouldOpen) bindR2CaseRow(row, a);
+  });
+}
+
 function renderRound2Grade(a, g) {
   const main = document.getElementById('gradeMain');
   const R = B.rubrics.round2;
@@ -4528,11 +5083,11 @@ function renderRound2Grade(a, g) {
     <div class="dim-card r2-case-card">
       <div class="dim-head"><h4>Case review</h4>${r2ScorePill(g.caseScore)}</div>
       <div class="dim-body">
-        <div class="field-label">Instructions</div>
         <div class="r2-case-instructions">${esc(r2CaseInstructionsText())}</div>
-        <div class="field-label" style="margin-top:12px;">Case assigned</div>
-        <div class="case-select">
-          ${R.cases.map(c => `<span class="chip ${g.caseId === c.id ? 'active' : ''}" data-case="${c.id}">${esc(c.name)}</span>`).join('')}
+        <div class="field-label" style="margin-top:12px;">Fox case — click to expand and select</div>
+        <div class="sub r2-bq-hint">One case per interview. Prompt first, then exhibits, then what good looks like.</div>
+        <div id="r2CaseList" class="r2-bq-list">
+          ${r2CaseList().map(function (c) { return r2CaseRowHtml(c, r2SelectedCaseId(g)); }).join('')}
         </div>
         <div class="field-label" style="margin-top:12px;">Overall case score</div>
         <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
@@ -4577,15 +5132,7 @@ function renderRound2Grade(a, g) {
   `;
   bindR2BandOpts(main, a);
   main.querySelectorAll('.r2-bq').forEach(function (row) { bindR2BehavioralRow(row, a); });
-  main.querySelectorAll('[data-case]').forEach(el => el.addEventListener('click', () => {
-    captureOpenR2Fields();
-    const rec = getGrade('round2', a.id);
-    rec.caseId = rec.caseId === el.dataset.case ? undefined : el.dataset.case;
-    saveGrade('round2', a.id, 'caseId', null, rec.caseId);
-    main.querySelectorAll('[data-case]').forEach(function (chip) {
-      chip.classList.toggle('active', rec.caseId === chip.dataset.case);
-    });
-  }));
+  main.querySelectorAll('.r2-case').forEach(function (row) { bindR2CaseRow(row, a); });
   main.querySelectorAll('[data-rec]').forEach(el => el.addEventListener('click', () => {
     captureOpenR2Fields();
     const rec = getGrade('round2', a.id);

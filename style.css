@@ -414,6 +414,49 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
   background: var(--paper); border: 1px dashed var(--line-strong);
   border-radius: var(--radius-s); padding: 10px 12px;
 }
+.r2-case {
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  background: var(--paper); overflow: hidden;
+}
+.r2-case.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.r2-case-badge {
+  display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 600;
+  color: var(--accent-ink); background: var(--accent-soft);
+  border-radius: 999px; padding: 1px 8px; vertical-align: 1px;
+}
+.r2-case-body { padding: 4px 14px 14px; border-top: 1px solid var(--line); }
+.r2-case-sec { margin-top: 14px; }
+.r2-case-sec:first-child { margin-top: 8px; }
+.r2-case-sec h5 {
+  margin: 0 0 8px; font-size: 12px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--slate);
+}
+.r2-case-ul { margin: 4px 0 10px 18px; padding: 0; }
+.r2-case-ul li { margin: 3px 0; font-size: 13.5px; line-height: 1.45; }
+.r2-case-when {
+  font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--slate); margin: 10px 0 4px;
+}
+.r2-case-qa { margin: 6px 0; padding: 6px 8px; background: var(--paper-raised); border-radius: var(--radius-s); }
+.r2-case-q { font-size: 13px; font-weight: 650; }
+.r2-case-a { font-size: 13px; color: var(--ink-soft); line-height: 1.45; margin-top: 2px; }
+.r2-case-steer { margin: 8px 0; }
+.r2-case-explore { margin-bottom: 6px; }
+.r2-case-table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 6px;
+  font-size: 13px;
+}
+.r2-case-table th, .r2-case-table td {
+  border: 1px solid var(--line); padding: 6px 8px; text-align: left;
+}
+.r2-case-table th { background: var(--accent-soft); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.r2-case-foot { font-size: 12px; color: var(--slate); margin: 0 0 10px; }
+.r2-case-step { margin: 10px 0; padding-top: 8px; border-top: 1px dashed var(--line); }
+.r2-case-step-h { font-size: 13.5px; font-weight: 700; margin-bottom: 6px; }
+.r2-case-key {
+  background: var(--good-soft); border-radius: var(--radius-s); padding: 8px 10px; margin: 6px 0;
+}
+.r2-case-note { font-size: 13px; color: var(--ink-soft); line-height: 1.45; margin: 6px 0 0; }
 .dim-head .n { color: var(--slate); font-weight: 400; font-size: 12px; }
 
 .university-tag { font-size: 11px; color: var(--slate); }
