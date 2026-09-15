@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-case-min-notes-20260915';
+const BUILD_STAMP = 'rd2-intro-rubric-20260915';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -1821,6 +1821,7 @@ function round1Average(g) {
 }
 
 const R2_CASE_DIM_SPEC = [
+  { key: 'introduction', label: 'Intro' },
   { key: 'framework', label: 'Framework' },
   { key: 'quant_reasoning', label: 'Math' },
   { key: 'brainstorming', label: 'Brainstorm' },
@@ -1828,6 +1829,12 @@ const R2_CASE_DIM_SPEC = [
   { key: 'fit_communication', label: 'Fit and communication/vibe check' },
 ];
 const R2_CASE_DIM_FALLBACKS = {
+  introduction: [
+    'Clearly understands the prompt, recaps to interviewer, and asks intelligent clarifying questions',
+    'Understands the main points of the prompt and communicates some clarifiers to interviewer',
+    'Can be seen taking notes or verbally acknowledges the prompt given by the interviewer',
+    'Makes no visible effort to understand or specify prompt information',
+  ],
   framework: [
     'Takes 1-2 minutes to produce a relevant, fleshed out, and MECE-adherent framework',
     'Produces a relevant framework while taking too long or missing some MECE/relevancy elements',
@@ -6031,7 +6038,7 @@ function renderRound2Grade(a, g) {
 
   main.innerHTML = `
     <div id="r2GradeRoot" class="r2-grade${caseExpanded ? ' r2-has-case' : ''} r2-layout-${esc(caseLayout)}${caseMin ? ' r2-case-minimized' : ''}">
-      <div class="weight-note r2-weight-note">Case score is the equal-weight average of scored categories among Framework, Math, Brainstorm, Recommendation, and Fit and communication/vibe check (/ 4). Behavioral avg is separate — typically 1–2 asked questions — and is not blended with the case score. Collapse or Clear on the case reference does not change scores.</div>
+      <div class="weight-note r2-weight-note">Case score is the equal-weight average of scored categories among Intro, Framework, Math, Brainstorm, Recommendation, and Fit and communication/vibe check (/ 4). Behavioral avg is separate — typically 1–2 asked questions — and is not blended with the case score. Collapse or Clear on the case reference does not change scores.</div>
       <div class="r2-split">
         <div class="r2-case-pane" id="r2CasePane" data-r2-pane="case">
           <div class="r2-case-toolbar">
@@ -6401,7 +6408,7 @@ function buildCsv(round) {
       return [a.name, a.email, interviewerName(g.interviewer) || '', g.interviewTime || '', g.initialNotes || '', g.thankYou ? 'Yes' : 'No', g.knowFlag ? 'Yes' : '', g.scores.fit0 ?? '', g.scores.fit1 ?? '', g.scores.fit2 ?? '', g.scores.personal1 ?? '', g.scores.personal2 ?? '', g.scores.personality ?? '', r1raw ?? '', r1std == null ? '' : +r1std.toFixed(3), r1blend == null ? '' : +r1blend.toFixed(3), raw ?? '', std == null ? '' : +std.toFixed(3), g.recommendation || '', g.notes || ''];
     });
   } else {
-    header = ['Candidate (First & Last) Name', 'Pair', 'Room', 'Interview time', 'Case Assigned', 'Framework', 'Math', 'Brainstorm', 'Recommendation Dim', 'Fit and communication/vibe check', 'Introduction', 'Market Sizing', 'Case avg /4', 'Behavioral avg /4', 'Behaviorals asked', 'Legacy overall case', 'Recommendation', 'Interviewer Notes'];
+    header = ['Candidate (First & Last) Name', 'Pair', 'Room', 'Interview time', 'Case Assigned', 'Intro', 'Framework', 'Math', 'Brainstorm', 'Recommendation Dim', 'Fit and communication/vibe check', 'Market Sizing', 'Case avg /4', 'Behavioral avg /4', 'Behaviorals asked', 'Legacy overall case', 'Recommendation', 'Interviewer Notes'];
     rows = poolForRound('round2').map(a => {
       const g = STATE.grades.round2[a.id] || { scores: {} };
       const caseObj = r2CaseById(g.caseId);
@@ -6411,7 +6418,7 @@ function buildCsv(round) {
         const q = r2BehavioralById(id);
         return (q ? q.title : id) + (typeof g.scores[id] === 'number' ? ' ' + g.scores[id] : '');
       }).join(' | ');
-      return [a.name, r2PairLabel(r2Interviewers(a.id)), r2InterviewRoom(a.id), r2InterviewTime(a.id), caseObj ? r2CaseTitle(caseObj) : '', r2DimScore(g, 'framework') ?? '', r2DimScore(g, 'quant_reasoning') ?? '', r2DimScore(g, 'brainstorming') ?? '', r2DimScore(g, 'recommendation') ?? '', r2DimScore(g, 'fit_communication') ?? '', g.scores.introduction ?? '', g.scores.market_sizing ?? '', r ? +r.total.toFixed(3) : '', beh == null ? '' : +beh.toFixed(3), asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
+      return [a.name, r2PairLabel(r2Interviewers(a.id)), r2InterviewRoom(a.id), r2InterviewTime(a.id), caseObj ? r2CaseTitle(caseObj) : '', r2DimScore(g, 'introduction') ?? '', r2DimScore(g, 'framework') ?? '', r2DimScore(g, 'quant_reasoning') ?? '', r2DimScore(g, 'brainstorming') ?? '', r2DimScore(g, 'recommendation') ?? '', r2DimScore(g, 'fit_communication') ?? '', g.scores.market_sizing ?? '', r ? +r.total.toFixed(3) : '', beh == null ? '' : +beh.toFixed(3), asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
     });
   }
   const csv = [header, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
