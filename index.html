@@ -358,6 +358,40 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
   min-height: 54px;
   field-sizing: content;
 }
+.r2-grader-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+.r2-grader-tab {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.r2-grader-tab:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.r2-grader-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.r2-grader-tab-hint {
+  color: var(--slate);
+  font-size: 12px;
+  margin: 0 0 14px;
+  line-height: 1.45;
+}
+.r2-dim-guide {
+  font-size: 12.5px;
+  color: var(--slate);
+  line-height: 1.45;
+  margin: 0 0 10px;
+}
 
 .side-stack { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 14px; }
 .content.r2-grade-page .side-stack { display: none; }
@@ -939,7 +973,7 @@ window.BOOTSTRAP = {"meta": {"builtAt": "2026-09-05", "applicantCount": 248, "co
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-intro-rubric-20260915';
+const BUILD_STAMP = 'rd2-grader-tabs-20260915';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -1663,11 +1697,17 @@ function r2BehavioralSelected(g) {
   if (g && Array.isArray(g.behavioralSelected)) return normalizeBehavioralSelected(g.behavioralSelected);
   const scores = (g && g.scores) || {};
   const notes = (g && g.qnotes) || {};
+  const notesBy = (g && g.qnotesBy) || {};
   const inferred = [];
   r2BehavioralList().forEach(function (q) {
-    if (typeof scores[q.id] === 'number' || (typeof notes[q.id] === 'string' && notes[q.id].trim())) {
-      inferred.push(q.id);
+    let hasNote = typeof notes[q.id] === 'string' && notes[q.id].trim();
+    if (!hasNote) {
+      Object.keys(notesBy).forEach(function (gk) {
+        const bucket = notesBy[gk];
+        if (bucket && typeof bucket[q.id] === 'string' && bucket[q.id].trim()) hasNote = true;
+      });
     }
+    if (typeof scores[q.id] === 'number' || hasNote) inferred.push(q.id);
   });
   return inferred;
 }
@@ -1716,6 +1756,9 @@ function keepLocalR2Behaviorals(prevR2) {
     }
     incoming.qnotes = mergeNotesPreferLocal(old && old.qnotes, incoming.qnotes);
     incoming.dimNotes = mergeNotesPreferLocal(old && old.dimNotes, incoming.dimNotes);
+    incoming.qnotesBy = mergeGraderNotesBy(old && old.qnotesBy, incoming.qnotesBy);
+    incoming.dimNotesBy = mergeGraderNotesBy(old && old.dimNotesBy, incoming.dimNotesBy);
+    incoming.notesBy = mergeGraderNotesBy(old && old.notesBy, incoming.notesBy);
     if (old && old.caseNotes && (incoming.caseNotes == null || incoming.caseNotes === '')) {
       incoming.caseNotes = old.caseNotes;
     }
@@ -1886,6 +1929,12 @@ function applyPendingOps() {
           rec.qnotes = Object.assign({}, rec.qnotes, op.value);
         } else if (op.field === 'dimNotes' && op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
           rec.dimNotes = Object.assign({}, rec.dimNotes, op.value);
+        } else if (op.field === 'qnotesBy' && op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
+          rec.qnotesBy = mergeGraderNotesBy(rec.qnotesBy, op.value);
+        } else if (op.field === 'dimNotesBy' && op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
+          rec.dimNotesBy = mergeGraderNotesBy(rec.dimNotesBy, op.value);
+        } else if (op.field === 'notesBy' && op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
+          rec.notesBy = mergeGraderNotesBy(rec.notesBy, op.value);
         } else if (op.field === 'interviewers') {
           rec.interviewers = Array.isArray(op.value) ? op.value.slice() : [];
         } else if (op.field === 'personalityIdx') {
@@ -2173,6 +2222,7 @@ function captureOpenR1Fields() {
 function captureOpenR2Fields() {
   if (STATE.gradeRound !== 'round2' || !STATE.currentApplicantId) return;
   const g = getGrade('round2', STATE.currentApplicantId);
+  migrateR2GraderNotes(g, STATE.currentApplicantId);
   const time = document.getElementById('r2InterviewTime');
   const room = document.getElementById('r2InterviewRoom');
   const i0 = document.getElementById('r2Interviewer0');
@@ -2183,17 +2233,9 @@ function captureOpenR2Fields() {
   const main = document.getElementById('gradeMain');
   if (!main) return;
   main.querySelectorAll('textarea[data-notekey]').forEach(function (ta) {
-    if (ta.dataset.notekey === '__main') g.notes = ta.value;
-    else if (ta.dataset.notekey === '__case') g.caseNotes = ta.value;
-    else {
-      g.qnotes = g.qnotes || {};
-      g.qnotes[ta.dataset.notekey] = ta.value;
-      if (isR2DimNoteKey(ta.dataset.notekey)) {
-        g.dimNotes = g.dimNotes || {};
-        g.dimNotes[ta.dataset.notekey] = ta.value;
-      }
-    }
+    foldR2GraderTextarea(g, STATE.currentApplicantId, ta);
   });
+  mirrorR2LegacyNotes(g, STATE.currentApplicantId);
   const caseNotes = document.getElementById('r2CaseNotes');
   if (caseNotes) g.caseNotes = caseNotes.value;
   if (hasR2CaseHold(STATE.currentApplicantId)) {
@@ -2718,6 +2760,9 @@ function hasR2Meta(rec) {
   if (rec.caseScore != null && rec.caseScore !== '') return true;
   if (rec.qnotes && typeof rec.qnotes === 'object' && Object.keys(rec.qnotes).length) return true;
   if (rec.dimNotes && typeof rec.dimNotes === 'object' && Object.keys(rec.dimNotes).length) return true;
+  if (rec.qnotesBy && typeof rec.qnotesBy === 'object' && Object.keys(rec.qnotesBy).length) return true;
+  if (rec.dimNotesBy && typeof rec.dimNotesBy === 'object' && Object.keys(rec.dimNotesBy).length) return true;
+  if (rec.notesBy && typeof rec.notesBy === 'object' && Object.keys(rec.notesBy).length) return true;
   return false;
 }
 
@@ -2764,6 +2809,14 @@ const R2_CASE_DIM_SPEC = [
   { key: 'recommendation', label: 'Recommendation' },
   { key: 'fit_communication', label: 'Fit and communication/vibe check' },
 ];
+const R2_GRADE_GUIDES = {
+  introduction: 'Assess how effectively the candidate engages at the start: active listening, grasping the prompt, clarifying as needed, recapping in their own words, and setting up the case with confidence.',
+  framework: 'Assess structure: a clear, relevant, MECE framework that breaks down the problem. Strong candidates explain their structure and use it to guide analysis; weak ones struggle to organize or produce incomplete frameworks.',
+  quant_reasoning: 'Assess quantitative work: accuracy, logical flow, explaining calculations and assumptions, and using math to support conclusions. Weak candidates need answers to proceed or fail to explain reasoning.',
+  brainstorming: 'Assess creativity and practicality: multiple well-developed ideas tied to the case. Strong candidates show originality; weak ones add little beyond the prompt or stay disorganized.',
+  recommendation: 'Assess the final recommendation: succinct, structured, integrates the prompt, and suggests what data or questions would refine the analysis. Weak candidates miss critical case elements.',
+  fit_communication: 'Assess presence and rapport throughout: clear, confident communication, client-ready composure, and whether they connect as a potential chapter member — not just case mechanics.',
+};
 const R2_CASE_DIM_FALLBACKS = {
   introduction: [
     'Clearly understands the prompt, recaps to interviewer, and asks intelligent clarifying questions',
@@ -2778,10 +2831,10 @@ const R2_CASE_DIM_FALLBACKS = {
     'Does not demonstrate a basic understanding of framework creation',
   ],
   quant_reasoning: [
-    'Clearly structures, navigates, and communicates through quantitative operations with minimal mistakes',
-    'Follows a logical path towards solutions with a few mistakes, may get lost and need guidance once or twice',
-    'Demonstrates basic quant abilities, but noticeably lacks in structuring and/or needs major guidance throughout',
-    'Cannot progress through one or more sections of quantitative analysis and must be given the answers to proceed',
+    'Provides a clear and logical profitability path, explaining all assumptions and defending their decisions well',
+    'Completes a generally understood profitability analysis walkthrough with few mistakes or instances of getting lost (1-2 max)',
+    'Needs consistent prompting in order to progress, gets lost in their logic 2+ times, or does not explain logic at all (provides answer)',
+    'Cannot complete the math effectively - must be given answers to continue with the case',
   ],
   brainstorming: [
     'Presents multiple creative, real-world driven ideas that accurately encompass all case aspects',
@@ -3444,6 +3497,189 @@ function normalizeR2Interviewers(raw) {
   return out.slice(0, 2);
 }
 
+const R2_GRADER_TAB_KEY = 'rem-r2-grader-tab-v1';
+const r2ActiveGraderSlot = {};
+
+function r2GraderSlotKey(applicantId, slot) {
+  const ids = r2Interviewers(applicantId);
+  const id = ids[slot] || '';
+  return id || ('__slot' + slot);
+}
+
+function r2GraderTabs(applicantId) {
+  const ids = r2Interviewers(applicantId);
+  return [0, 1].map(function (slot) {
+    const key = r2GraderSlotKey(applicantId, slot);
+    const name = ids[slot]
+      ? (interviewerShort(ids[slot]) || interviewerName(ids[slot]) || ids[slot])
+      : ('Grader ' + (slot + 1));
+    return { slot: slot, key: key, name: name };
+  });
+}
+
+function getR2ActiveGraderSlot(applicantId) {
+  if (r2ActiveGraderSlot[applicantId] != null) return r2ActiveGraderSlot[applicantId];
+  try {
+    const map = JSON.parse(localStorage.getItem(R2_GRADER_TAB_KEY) || '{}');
+    if (map[applicantId] != null) return Number(map[applicantId]) || 0;
+  } catch (e) { /* ignore */ }
+  return 0;
+}
+
+function setR2ActiveGraderSlot(applicantId, slot) {
+  r2ActiveGraderSlot[applicantId] = slot === 1 ? 1 : 0;
+  try {
+    const map = JSON.parse(localStorage.getItem(R2_GRADER_TAB_KEY) || '{}');
+    map[applicantId] = r2ActiveGraderSlot[applicantId];
+    localStorage.setItem(R2_GRADER_TAB_KEY, JSON.stringify(map));
+  } catch (e) { /* ignore */ }
+}
+
+function r2ActiveGraderKey(applicantId) {
+  return r2GraderSlotKey(applicantId, getR2ActiveGraderSlot(applicantId));
+}
+
+function r2PrimaryGraderKey(applicantId) {
+  return r2GraderSlotKey(applicantId, 0);
+}
+
+function mergeGraderNotesBy(existing, patch) {
+  const base = (existing && typeof existing === 'object' && !Array.isArray(existing)) ? existing : {};
+  const delta = (patch && typeof patch === 'object' && !Array.isArray(patch)) ? patch : {};
+  const out = Object.assign({}, base);
+  Object.keys(delta).forEach(function (graderKey) {
+    const prev = out[graderKey];
+    const next = delta[graderKey];
+    if (next && typeof next === 'object' && !Array.isArray(next)) {
+      out[graderKey] = Object.assign({}, prev && typeof prev === 'object' ? prev : {}, next);
+    } else if (typeof next === 'string') {
+      out[graderKey] = next;
+    }
+  });
+  return Object.keys(out).length ? out : existing;
+}
+
+function migrateR2GraderNotes(g, applicantId) {
+  if (!g || !applicantId) return;
+  const primary = r2PrimaryGraderKey(applicantId);
+  g.dimNotesBy = g.dimNotesBy || {};
+  g.qnotesBy = g.qnotesBy || {};
+  g.notesBy = g.notesBy || {};
+  if (g.dimNotes && typeof g.dimNotes === 'object') {
+    const bucket = Object.assign({}, g.dimNotesBy[primary] || {});
+    Object.keys(g.dimNotes).forEach(function (k) {
+      const legacy = noteText(g.dimNotes[k]).trim();
+      if (legacy && !noteText(bucket[k]).trim()) bucket[k] = g.dimNotes[k];
+    });
+    if (Object.keys(bucket).length) g.dimNotesBy[primary] = bucket;
+  }
+  if (g.qnotes && typeof g.qnotes === 'object') {
+    const bucket = Object.assign({}, g.qnotesBy[primary] || {});
+    Object.keys(g.qnotes).forEach(function (k) {
+      const legacy = noteText(g.qnotes[k]).trim();
+      if (legacy && !noteText(bucket[k]).trim()) bucket[k] = g.qnotes[k];
+    });
+    if (Object.keys(bucket).length) g.qnotesBy[primary] = bucket;
+  }
+  if (noteText(g.notes).trim() && !noteText(g.notesBy[primary]).trim()) {
+    g.notesBy[primary] = g.notes;
+  }
+}
+
+function mirrorR2LegacyNotes(g, applicantId) {
+  if (!g || !applicantId) return;
+  const primary = r2PrimaryGraderKey(applicantId);
+  const dim = g.dimNotesBy && g.dimNotesBy[primary];
+  if (dim && typeof dim === 'object' && Object.keys(dim).length) {
+    g.dimNotes = Object.assign({}, g.dimNotes || {}, dim);
+  }
+  const qn = g.qnotesBy && g.qnotesBy[primary];
+  if (qn && typeof qn === 'object' && Object.keys(qn).length) {
+    g.qnotes = Object.assign({}, g.qnotes || {}, qn);
+  }
+  if (g.notesBy && noteText(g.notesBy[primary]).trim()) g.notes = g.notesBy[primary];
+}
+
+function foldR2GraderTextarea(g, applicantId, ta) {
+  if (!g || !ta || !applicantId) return;
+  migrateR2GraderNotes(g, applicantId);
+  const graderKey = r2ActiveGraderKey(applicantId);
+  const key = ta.dataset.notekey;
+  if (key === '__main') {
+    g.notesBy = g.notesBy || {};
+    g.notesBy[graderKey] = ta.value;
+    if (graderKey === r2PrimaryGraderKey(applicantId)) g.notes = ta.value;
+    return;
+  }
+  if (key === '__case') {
+    g.caseNotes = ta.value;
+    return;
+  }
+  if (isR2DimNoteKey(key)) {
+    g.dimNotesBy = g.dimNotesBy || {};
+    g.dimNotesBy[graderKey] = g.dimNotesBy[graderKey] || {};
+    g.dimNotesBy[graderKey][key] = ta.value;
+    if (graderKey === r2PrimaryGraderKey(applicantId)) {
+      g.dimNotes = g.dimNotes || {};
+      g.dimNotes[key] = ta.value;
+    }
+    return;
+  }
+  g.qnotesBy = g.qnotesBy || {};
+  g.qnotesBy[graderKey] = g.qnotesBy[graderKey] || {};
+  g.qnotesBy[graderKey][key] = ta.value;
+  if (graderKey === r2PrimaryGraderKey(applicantId)) {
+    g.qnotes = g.qnotes || {};
+    g.qnotes[key] = ta.value;
+  }
+}
+
+function saveR2GraderNoteFields(round, applicantId, g) {
+  if (round !== 'round2' || !g) return;
+  mirrorR2LegacyNotes(g, applicantId);
+  if (g.dimNotesBy && Object.keys(g.dimNotesBy).length) {
+    saveGrade(round, applicantId, 'dimNotesBy', null, cloneJson(g.dimNotesBy));
+  }
+  if (g.qnotesBy && Object.keys(g.qnotesBy).length) {
+    saveGrade(round, applicantId, 'qnotesBy', null, cloneJson(g.qnotesBy));
+  }
+  if (g.notesBy && Object.keys(g.notesBy).length) {
+    saveGrade(round, applicantId, 'notesBy', null, cloneJson(g.notesBy));
+  }
+  if (g.dimNotes) saveGrade(round, applicantId, 'dimNotes', null, cloneJson(g.dimNotes));
+  if (g.qnotes) saveGrade(round, applicantId, 'qnotes', null, cloneJson(g.qnotes));
+  if (typeof g.notes === 'string') saveGrade(round, applicantId, 'notes', null, g.notes);
+}
+
+function r2DimNoteForGrader(g, key, graderKey, applicantId) {
+  if (!g || !key) return '';
+  const by = g.dimNotesBy && g.dimNotesBy[graderKey];
+  if (by && noteText(by[key]).trim()) return by[key];
+  if (isR2MathKey(key) && by) {
+    if (noteText(by.math).trim()) return by.math;
+    if (noteText(by.quant_reasoning).trim()) return by.quant_reasoning;
+  }
+  if (graderKey === r2PrimaryGraderKey(applicantId)) return r2DimNote(g, key);
+  return '';
+}
+
+function r2QnoteForGrader(g, key, graderKey, applicantId) {
+  if (!g || !key) return '';
+  const by = g.qnotesBy && g.qnotesBy[graderKey];
+  if (by && typeof by[key] === 'string') return by[key];
+  if (graderKey === r2PrimaryGraderKey(applicantId) && g.qnotes && typeof g.qnotes[key] === 'string') {
+    return g.qnotes[key];
+  }
+  return '';
+}
+
+function r2RecNoteForGrader(g, graderKey, applicantId) {
+  if (!g) return '';
+  if (g.notesBy && noteText(g.notesBy[graderKey]).trim()) return g.notesBy[graderKey];
+  if (graderKey === r2PrimaryGraderKey(applicantId) && noteText(g.notes).trim()) return g.notes;
+  return '';
+}
+
 function r2Interviewers(applicantId) {
   const g = STATE.grades.round2[applicantId];
   if (g && Array.isArray(g.interviewers)) return normalizeR2Interviewers(g.interviewers);
@@ -3575,6 +3811,7 @@ function persistR2Schedule(a) {
   saveGrade('round2', a.id, 'interviewers', null, rec.interviewers.slice());
   saveGrade('round2', a.id, 'interviewRoom', null, rec.interviewRoom || null);
   saveGrade('round2', a.id, 'interviewTime', null, rec.interviewTime || null);
+  syncR2GraderTabLabels(a);
 }
 
 function bindR2AssignControls(a) {
@@ -5281,18 +5518,9 @@ function applyLiveR2GradeUpdate() {
   syncR2CaseRows(main, g, a, { keepCaseScroll: true });
   r2CaseDims().forEach(function (d) { updateR2ScoreUI(main, g, d.key); });
   updateR2ScoreUI(main, g, 'caseScore');
-  main.querySelectorAll('textarea[data-notekey]').forEach(function (ta) {
-    if (document.activeElement !== ta) {
-      const key = ta.dataset.notekey;
-      let next = '';
-      if (key === '__main') next = g.notes || '';
-      else if (key === '__case') next = g.caseNotes || '';
-      else if (isR2DimNoteKey(key)) next = r2DimNote(g, key) || '';
-      else next = (g.qnotes && g.qnotes[key]) || '';
-      if (ta.value !== next) ta.value = next;
-    }
-    autosizeTextarea(ta);
-  });
+  migrateR2GraderNotes(g, a.id);
+  syncR2GraderTabLabels(a);
+  syncR2GraderNotesUI(main, g, a.id);
   syncR2AssignFields(g);
   updateHeaderScore('round2', g, a);
   restoreR2PaneScroll(paneSnap);
@@ -6156,15 +6384,13 @@ function bindNotesFields(container, round, applicantId) {
       } else if (ta.dataset.notekey === '__case') {
         g.caseNotes = ta.value;
         saveGrade(round, applicantId, 'caseNotes', null, ta.value);
+      } else if (round === 'round2') {
+        foldR2GraderTextarea(g, applicantId, ta);
+        saveR2GraderNoteFields(round, applicantId, g);
       } else {
         g.qnotes = g.qnotes || {};
         g.qnotes[ta.dataset.notekey] = ta.value;
         saveGrade(round, applicantId, 'qnotes', null, cloneJson(g.qnotes));
-        if (round === 'round2' && isR2DimNoteKey(ta.dataset.notekey)) {
-          g.dimNotes = g.dimNotes || {};
-          g.dimNotes[ta.dataset.notekey] = ta.value;
-          saveGrade(round, applicantId, 'dimNotes', null, cloneJson(g.dimNotes));
-        }
       }
     }
     ta.addEventListener('input', persist);
@@ -6480,8 +6706,9 @@ function r2ScorePill(val) {
   return `<span class="score-pill ${val ? '' : 'none'}">${val || '—'}</span>`;
 }
 
-function r2BehavioralBodyHtml(q, g) {
+function r2BehavioralBodyHtml(q, g, applicantId, graderKey) {
   const score = g.scores && g.scores[q.id];
+  const note = r2QnoteForGrader(g, q.id, graderKey, applicantId);
   return `<div class="r2-bq-body">
       <div class="read-aloud">Read aloud</div>
       <div class="prompt">${esc(q.q)}</div>
@@ -6492,11 +6719,11 @@ function r2BehavioralBodyHtml(q, g) {
           return `<div class="band-opt ${score === n ? 'sel' : ''}" data-key="${esc(q.id)}" data-val="${k}"><span class="sc">${k}</span>${esc(crit.text || crit.label || '')}</div>`;
         }).join('')}
       </div>
-      <div class="notes-field"><textarea data-notekey="${esc(q.id)}" placeholder="Candidate's answer, notes…">${esc((g.qnotes && g.qnotes[q.id]) || '')}</textarea></div>
+      <div class="notes-field"><textarea data-notekey="${esc(q.id)}" placeholder="Candidate's answer, notes…">${esc(note)}</textarea></div>
     </div>`;
 }
 
-function r2BehavioralRowHtml(q, g, selected) {
+function r2BehavioralRowHtml(q, g, selected, applicantId, graderKey) {
   const score = g.scores && g.scores[q.id];
   const open = selected.indexOf(q.id) !== -1;
   return `<div class="r2-bq${open ? ' open sel' : ''}" data-bqid="${esc(q.id)}">
@@ -6507,7 +6734,7 @@ function r2BehavioralRowHtml(q, g, selected) {
         </button>
         ${open ? `<button type="button" class="r2-bq-clear" data-bqclear="${esc(q.id)}">Clear</button>` : ''}
       </div>
-      ${open ? r2BehavioralBodyHtml(q, g) : ''}
+      ${open ? r2BehavioralBodyHtml(q, g, applicantId, graderKey) : ''}
     </div>`;
 }
 
@@ -6521,7 +6748,7 @@ function persistR2BehavioralSelected(a, selected) {
   const rec = getGrade('round2', a.id);
   rec.behavioralSelected = normalizeBehavioralSelected(selected);
   holdR2Behaviorals(a.id, rec.behavioralSelected);
-  if (rec.qnotes) saveGrade('round2', a.id, 'qnotes', null, cloneJson(rec.qnotes));
+  saveR2GraderNoteFields('round2', a.id, rec);
   saveGrade('round2', a.id, 'behavioralSelected', null, rec.behavioralSelected.slice());
   updateHeaderScore('round2', rec, a);
   return rec;
@@ -6569,8 +6796,7 @@ function bindR2BandOpts(root, a) {
         rec.scores.quant_reasoning = rec.scores[key];
         rec.scores.math = rec.scores[key];
       }
-      if (rec.qnotes) saveGrade('round2', a.id, 'qnotes', null, cloneJson(rec.qnotes));
-      if (rec.dimNotes) saveGrade('round2', a.id, 'dimNotes', null, cloneJson(rec.dimNotes));
+      saveR2GraderNoteFields('round2', a.id, rec);
       saveGrade('round2', a.id, 'score', key, rec.scores[key]);
       if (isR2MathKey(key)) {
         const mathVal = rec.scores.quant_reasoning;
@@ -6630,7 +6856,7 @@ function syncR2BehavioralRows(container, g, a) {
     const focused = row.contains(document.activeElement) && isEditingField();
     if (shouldOpen && !isOpen) {
       row.classList.add('open', 'sel');
-      if (!row.querySelector('.r2-bq-body')) row.insertAdjacentHTML('beforeend', r2BehavioralBodyHtml(q, g));
+      if (!row.querySelector('.r2-bq-body')) row.insertAdjacentHTML('beforeend', r2BehavioralBodyHtml(q, g, a.id, r2ActiveGraderKey(a.id)));
       const bar = row.querySelector('.r2-bq-bar');
       if (bar && !bar.querySelector('.r2-bq-clear')) {
         bar.insertAdjacentHTML('beforeend', `<button type="button" class="r2-bq-clear" data-bqclear="${esc(id)}">Clear</button>`);
@@ -6940,14 +7166,85 @@ function syncR2CaseRows(container, g, a, opts) {
   applyR2CaseSplit(g, a, opts);
 }
 
-function r2DimCardHtml(d, g) {
+function r2DimGuideHtml(key) {
+  const guideKey = isR2MathKey(key) ? 'quant_reasoning' : key;
+  const text = R2_GRADE_GUIDES[guideKey] || '';
+  if (!text) return '';
+  return `<p class="r2-dim-guide">${esc(text)}</p>`;
+}
+
+function r2GraderTabsHtml(a) {
+  const active = getR2ActiveGraderSlot(a.id);
+  return `<div class="r2-grader-tabs" id="r2GraderTabs">
+      ${r2GraderTabs(a.id).map(function (tab) {
+        return `<button type="button" class="r2-grader-tab${tab.slot === active ? ' active' : ''}" data-grader-slot="${tab.slot}" data-grader-key="${esc(tab.key)}" title="Comments and notes for ${esc(tab.name)}">${esc(tab.name)}</button>`;
+      }).join('')}
+    </div>
+    <p class="sub r2-grader-tab-hint">Scores, recommendation, and behavioral picks stay synced across both graders. Comments and notes are per grader.</p>`;
+}
+
+function syncR2GraderTabLabels(a) {
+  const main = document.getElementById('gradeMain');
+  if (!main || !a) return;
+  const active = getR2ActiveGraderSlot(a.id);
+  r2GraderTabs(a.id).forEach(function (tab) {
+    const btn = main.querySelector('.r2-grader-tab[data-grader-slot="' + tab.slot + '"]');
+    if (!btn) return;
+    btn.textContent = tab.name;
+    btn.title = 'Comments and notes for ' + tab.name;
+    btn.dataset.graderKey = tab.key;
+    btn.classList.toggle('active', tab.slot === active);
+  });
+}
+
+function syncR2GraderNotesUI(main, g, applicantId) {
+  if (!main || !g || !applicantId) return;
+  migrateR2GraderNotes(g, applicantId);
+  const graderKey = r2ActiveGraderKey(applicantId);
+  main.querySelectorAll('textarea[data-notekey]').forEach(function (ta) {
+    if (document.activeElement === ta) return;
+    const key = ta.dataset.notekey;
+    let next = '';
+    if (key === '__main') next = r2RecNoteForGrader(g, graderKey, applicantId);
+    else if (key === '__case') next = g.caseNotes || '';
+    else if (isR2DimNoteKey(key)) next = r2DimNoteForGrader(g, key, graderKey, applicantId);
+    else next = r2QnoteForGrader(g, key, graderKey, applicantId);
+    if (ta.value !== next) ta.value = next;
+    autosizeTextarea(ta);
+  });
+}
+
+function switchR2GraderTab(a, slot) {
+  captureOpenR2Fields();
+  setR2ActiveGraderSlot(a.id, slot);
+  const main = document.getElementById('gradeMain');
+  const g = getGrade('round2', a.id);
+  syncR2GraderTabLabels(a);
+  syncR2GraderNotesUI(main, g, a.id);
+  autosizeR2Notes(main);
+}
+
+function bindR2GraderTabs(main, a) {
+  if (!main || !a) return;
+  main.querySelectorAll('.r2-grader-tab').forEach(function (btn) {
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function () {
+      switchR2GraderTab(a, Number(btn.dataset.graderSlot) || 0);
+    });
+  });
+}
+
+function r2DimCardHtml(d, g, applicantId, graderKey) {
   const R = B.rubrics.round2;
-  const note = r2DimNote(g, d.key);
+  const note = r2DimNoteForGrader(g, d.key, graderKey, applicantId);
   const score = r2DimScore(g, d.key);
+  const guideKey = isR2MathKey(d.key) ? 'quant_reasoning' : d.key;
   return `
       <div class="dim-card">
         <div class="dim-head"><h4>${esc(d.label)}</h4>${r2ScorePill(score)}</div>
         <div class="dim-body">
+          ${r2DimGuideHtml(guideKey)}
           <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
             ${d.levels.map((txt, i) => { const val = 4 - i; return `<div class="band-opt ${score === val ? 'sel' : ''}" data-key="${d.key}" data-val="${val}"><span class="sc">${R.levelLabels[i]}</span>${esc(txt)}</div>`; }).join('')}
           </div>
@@ -6961,10 +7258,12 @@ function renderRound2Grade(a, g) {
   const main = document.getElementById('gradeMain');
   captureOpenR2Fields();
   g = getGrade('round2', a.id);
+  migrateR2GraderNotes(g, a.id);
   if (!Array.isArray(g.behavioralSelected)) g.behavioralSelected = r2BehavioralSelected(g);
   const selected = r2BehavioralSelected(g);
   const qs = r2BehavioralList();
   const caseDims = r2CaseDims();
+  const graderKey = r2ActiveGraderKey(a.id);
   const selectedCaseId = r2SelectedCaseId(g);
   const selectedCase = selectedCaseId ? r2CaseById(selectedCaseId) : null;
   const selectedTitle = selectedCase ? r2CaseTitle(selectedCase) : '';
@@ -6996,8 +7295,9 @@ function renderRound2Grade(a, g) {
           </div>
         </div>
         <div class="r2-rubric-pane" id="r2RubricPane" data-r2-pane="rubric">
+          ${r2GraderTabsHtml(a)}
           ${r2CaseNotesHtml(g)}
-          ${caseDims.map(function (d) { return r2DimCardHtml(d, g); }).join('')}
+          ${caseDims.map(function (d) { return r2DimCardHtml(d, g, a.id, graderKey); }).join('')}
           <div class="card card-pad">
             <div class="field-label">Recommendation</div>
             <div class="recommend-row">
@@ -7005,7 +7305,7 @@ function renderRound2Grade(a, g) {
             </div>
             <label class="flag-row"><input type="checkbox" id="flagSecond2" ${g.flagSecond ? 'checked' : ''}> Flag for second reviewer</label>
             <div class="field-label">Interviewer notes</div>
-            <div class="notes-field"><textarea data-notekey="__main" placeholder="Anything else worth flagging…">${esc(g.notes || '')}</textarea></div>
+            <div class="notes-field"><textarea data-notekey="__main" placeholder="Anything else worth flagging…">${esc(r2RecNoteForGrader(g, graderKey, a.id))}</textarea></div>
           </div>
         </div>
       </div>
@@ -7017,7 +7317,7 @@ function renderRound2Grade(a, g) {
         <div class="dim-body">
           <div class="sub r2-bq-hint">Click a title to expand it, select it, and take notes. Usually 1–2; more is allowed. Scores here are not part of the case average.</div>
           <div id="r2BehavioralList" class="r2-bq-list">
-            ${qs.map(function (q) { return r2BehavioralRowHtml(q, g, selected); }).join('')}
+            ${qs.map(function (q) { return r2BehavioralRowHtml(q, g, selected, a.id, graderKey); }).join('')}
           </div>
         </div>
       </div>
@@ -7025,6 +7325,7 @@ function renderRound2Grade(a, g) {
     </div>
   `;
   if (contentEl) contentEl.classList.toggle('r2-case-open', caseExpanded);
+  bindR2GraderTabs(main, a);
   bindR2BandOpts(main, a);
   main.querySelectorAll('.r2-bq').forEach(function (row) { bindR2BehavioralRow(row, a); });
   main.querySelectorAll('.r2-case').forEach(function (row) { bindR2CaseRow(row, a); });

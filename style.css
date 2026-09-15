@@ -348,6 +348,40 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
   min-height: 54px;
   field-sizing: content;
 }
+.r2-grader-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+.r2-grader-tab {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.r2-grader-tab:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.r2-grader-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.r2-grader-tab-hint {
+  color: var(--slate);
+  font-size: 12px;
+  margin: 0 0 14px;
+  line-height: 1.45;
+}
+.r2-dim-guide {
+  font-size: 12.5px;
+  color: var(--slate);
+  line-height: 1.45;
+  margin: 0 0 10px;
+}
 
 .side-stack { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 14px; }
 .content.r2-grade-page .side-stack { display: none; }
