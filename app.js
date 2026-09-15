@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-rubric-five-20260914';
+const BUILD_STAMP = 'rd2-case-min-notes-20260915';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -524,6 +524,8 @@ const r2CaseHolds = {};
 const R2_CASE_HOLD_MS = 30000;
 const r2CaseRefOpen = {};
 const R2_CASE_LAYOUT_KEY = 'rem-uf-r2-case-layout';
+const R2_CASE_MIN_KEY = 'rem-uf-r2-case-minimized';
+const R2_NOTE_MIN_PX = 54;
 
 function r2BehavioralList() {
   const fromB = B.rubrics && B.rubrics.round2 && B.rubrics.round2.behaviorals;
@@ -670,6 +672,30 @@ function setR2CaseLayout(layout) {
   try { localStorage.setItem(R2_CASE_LAYOUT_KEY, layout === 'stacked' ? 'stacked' : 'side'); } catch (e) { /* ignore */ }
 }
 
+function getR2CaseMinimized() {
+  try { return localStorage.getItem(R2_CASE_MIN_KEY) === '1'; } catch (e) { return false; }
+}
+
+function setR2CaseMinimized(on) {
+  try { localStorage.setItem(R2_CASE_MIN_KEY, on ? '1' : '0'); } catch (e) { /* ignore */ }
+}
+
+function applyR2CaseMinimized() {
+  const on = getR2CaseMinimized();
+  const root = document.getElementById('r2GradeRoot');
+  if (root) root.classList.toggle('r2-case-minimized', on);
+  const btn = document.getElementById('r2CaseMinBtn');
+  if (btn) {
+    const hasCase = !!(root && root.classList.contains('r2-has-case'));
+    btn.hidden = !hasCase;
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.setAttribute('aria-label', on ? 'Expand case to half the page' : 'Minimize case to a thin rail');
+    btn.title = on ? 'Expand case to half' : 'Minimize case';
+    btn.textContent = on ? '»' : '«';
+  }
+  requestAnimationFrame(function () { autosizeR2Notes(); });
+}
+
 function applyR2CaseLayout(layout) {
   const next = layout === 'stacked' ? 'stacked' : 'side';
   const root = document.getElementById('r2GradeRoot');
@@ -677,10 +703,12 @@ function applyR2CaseLayout(layout) {
     root.classList.toggle('r2-layout-side', next === 'side');
     root.classList.toggle('r2-layout-stacked', next === 'stacked');
   }
-  if (!contentEl) return;
-  contentEl.querySelectorAll('[data-r2layout]').forEach(function (btn) {
-    btn.classList.toggle('active', btn.dataset.r2layout === next);
-  });
+  if (contentEl) {
+    contentEl.querySelectorAll('[data-r2layout]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.r2layout === next);
+    });
+  }
+  applyR2CaseMinimized();
 }
 
 function shouldHoldR2AgainstPoll() {
@@ -1277,6 +1305,9 @@ function saveLabelText() {
 
 window.addEventListener('visibilitychange', function () { if (document.hidden && pendingOps().length) flushSave(false); });
 window.addEventListener('pagehide', function () { if (pendingOps().length) flushSave(true); });
+window.addEventListener('resize', function () {
+  if (STATE.view === 'grade' && STATE.gradeRound === 'round2') autosizeR2Notes();
+});
 
 // ---------------- Applicant merge + live Sheets pull ----------------
 // Matching is a port of build.py find_applicant(): email → exact name →
@@ -4308,14 +4339,16 @@ function applyLiveR2GradeUpdate() {
   r2CaseDims().forEach(function (d) { updateR2ScoreUI(main, g, d.key); });
   updateR2ScoreUI(main, g, 'caseScore');
   main.querySelectorAll('textarea[data-notekey]').forEach(function (ta) {
-    if (document.activeElement === ta) return;
-    const key = ta.dataset.notekey;
-    let next = '';
-    if (key === '__main') next = g.notes || '';
-    else if (key === '__case') next = g.caseNotes || '';
-    else if (isR2DimNoteKey(key)) next = r2DimNote(g, key) || '';
-    else next = (g.qnotes && g.qnotes[key]) || '';
-    if (ta.value !== next) ta.value = next;
+    if (document.activeElement !== ta) {
+      const key = ta.dataset.notekey;
+      let next = '';
+      if (key === '__main') next = g.notes || '';
+      else if (key === '__case') next = g.caseNotes || '';
+      else if (isR2DimNoteKey(key)) next = r2DimNote(g, key) || '';
+      else next = (g.qnotes && g.qnotes[key]) || '';
+      if (ta.value !== next) ta.value = next;
+    }
+    autosizeTextarea(ta);
   });
   syncR2AssignFields(g);
   updateHeaderScore('round2', g, a);
@@ -5193,7 +5226,33 @@ function bindNotesFields(container, round, applicantId) {
     }
     ta.addEventListener('input', persist);
     ta.addEventListener('blur', persist);
+    if (round === 'round2') bindR2NoteAutosize(ta);
   });
+}
+
+function autosizeTextarea(ta) {
+  if (!ta) return;
+  const pane = ta.closest('.r2-rubric-pane, .r2-case-pane');
+  const y = pane ? pane.scrollTop : 0;
+  ta.style.overflowY = 'hidden';
+  ta.style.height = '0px';
+  ta.style.height = Math.max(R2_NOTE_MIN_PX, ta.scrollHeight) + 'px';
+  if (pane) pane.scrollTop = y;
+}
+
+function autosizeR2Notes(root) {
+  const scope = root || document.getElementById('gradeMain');
+  if (!scope) return;
+  scope.querySelectorAll('textarea[data-notekey]').forEach(autosizeTextarea);
+}
+
+function bindR2NoteAutosize(ta) {
+  if (!ta || ta.dataset.autosize === '1') return;
+  ta.dataset.autosize = '1';
+  function grow() { autosizeTextarea(ta); }
+  ta.addEventListener('input', grow);
+  ta.addEventListener('focus', grow);
+  grow();
 }
 
 function renderScreenGrade(a, g) {
@@ -5898,6 +5957,17 @@ function bindR2CaseCollapse(a) {
   });
 }
 
+function bindR2CaseMin() {
+  const btn = document.getElementById('r2CaseMinBtn');
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', function (evt) {
+    if (evt) { evt.preventDefault(); evt.stopPropagation(); }
+    setR2CaseMinimized(!getR2CaseMinimized());
+    applyR2CaseMinimized();
+  });
+}
+
 function syncR2CaseRows(container, g, a, opts) {
   if (!container) return;
   const selectedId = r2SelectedCaseId(g);
@@ -5957,9 +6027,10 @@ function renderRound2Grade(a, g) {
   const selectedTitle = selectedCase ? r2CaseTitle(selectedCase) : '';
   const caseExpanded = !!selectedCaseId && isR2CaseRefOpen(a.id);
   const caseLayout = getR2CaseLayout();
+  const caseMin = getR2CaseMinimized();
 
   main.innerHTML = `
-    <div id="r2GradeRoot" class="r2-grade${caseExpanded ? ' r2-has-case' : ''} r2-layout-${esc(caseLayout)}">
+    <div id="r2GradeRoot" class="r2-grade${caseExpanded ? ' r2-has-case' : ''} r2-layout-${esc(caseLayout)}${caseMin ? ' r2-case-minimized' : ''}">
       <div class="weight-note r2-weight-note">Case score is the equal-weight average of scored categories among Framework, Math, Brainstorm, Recommendation, and Fit and communication/vibe check (/ 4). Behavioral avg is separate — typically 1–2 asked questions — and is not blended with the case score. Collapse or Clear on the case reference does not change scores.</div>
       <div class="r2-split">
         <div class="r2-case-pane" id="r2CasePane" data-r2-pane="case">
@@ -5968,6 +6039,7 @@ function renderRound2Grade(a, g) {
               <h4>Case reference</h4>
               <span class="r2-open-case-title" id="r2OpenCaseTitle"${selectedTitle ? '' : ' hidden'}>${esc(selectedTitle)}</span>
               <button type="button" class="r2-case-collapse" id="r2CaseCollapseBtn"${selectedCaseId ? '' : ' hidden'} aria-expanded="${caseExpanded ? 'true' : 'false'}" aria-label="${caseExpanded ? 'Collapse case reference' : 'Expand case reference'}" title="${caseExpanded ? 'Collapse case reference' : 'Expand case reference'}">${caseExpanded ? '▾' : '▸'}</button>
+              <button type="button" class="r2-case-min" id="r2CaseMinBtn"${caseExpanded ? '' : ' hidden'} aria-pressed="${getR2CaseMinimized() ? 'true' : 'false'}" aria-label="${getR2CaseMinimized() ? 'Expand case to half the page' : 'Minimize case to a thin rail'}" title="${getR2CaseMinimized() ? 'Expand case to half' : 'Minimize case'}">${getR2CaseMinimized() ? '»' : '«'}</button>
             </div>
             <div class="r2-case-instructions">${esc(r2CaseInstructionsText())}</div>
             <div class="field-label r2-case-pick-lbl">Case — click to open the interviewer guide</div>
@@ -6014,6 +6086,9 @@ function renderRound2Grade(a, g) {
   main.querySelectorAll('.r2-bq').forEach(function (row) { bindR2BehavioralRow(row, a); });
   main.querySelectorAll('.r2-case').forEach(function (row) { bindR2CaseRow(row, a); });
   bindR2CaseCollapse(a);
+  bindR2CaseMin();
+  autosizeR2Notes(main);
+  requestAnimationFrame(function () { autosizeR2Notes(main); });
   main.querySelectorAll('[data-rec]').forEach(el => el.addEventListener('click', () => {
     captureOpenR2Fields();
     const rec = getGrade('round2', a.id);

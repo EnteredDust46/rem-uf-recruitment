@@ -341,6 +341,13 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 
 .notes-field { margin-top: 6px; }
 .notes-field textarea { min-height: 54px; font-size: 13px; }
+.r2-grade .notes-field textarea {
+  overflow: hidden;
+  overflow-y: hidden;
+  resize: none;
+  min-height: 54px;
+  field-sizing: content;
+}
 
 .side-stack { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 14px; }
 .content.r2-grade-page .side-stack { display: none; }
@@ -539,12 +546,17 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
   margin: 0; font-size: 13.5px; font-family: var(--font-body); font-weight: 700; color: var(--accent-ink);
 }
 .r2-open-case-title { font-size: 12.5px; font-weight: 650; color: var(--accent-ink); margin-right: auto; }
-.r2-case-collapse {
+.r2-case-collapse,
+.r2-case-min {
   flex: none; width: 28px; height: 28px; border: 1px solid var(--line-strong);
   border-radius: var(--radius-s); background: var(--paper); color: var(--slate);
   font-size: 14px; line-height: 1; cursor: pointer;
 }
-.r2-case-collapse:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.r2-case-collapse:hover,
+.r2-case-min:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.r2-case-min[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.r2-layout-stacked .r2-case-min { display: none; }
+.r2-grade:not(.r2-has-case) .r2-case-min { display: none; }
 .r2-case-guide .r2-case-body { border-top: none; padding: 8px 4px 16px; }
 .r2-case-doc {
   font-size: 14.5px; line-height: 1.6; color: var(--ink);
@@ -609,11 +621,59 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 .r2-has-case .r2-rubric-pane { padding: 12px; }
 .r2-has-case .r2-case-pane { padding: 0 0 12px; }
 .r2-has-case .r2-case-guide { padding: 0 16px; }
+.r2-has-case.r2-layout-side .r2-split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  transition: grid-template-columns 180ms ease, gap 180ms ease;
+}
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-split {
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+}
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-pane {
+  overflow: hidden;
+  padding: 8px 6px;
+}
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-toolbar {
+  position: static;
+  padding: 0;
+  border-bottom: none;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-toolbar-head {
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  margin: 0;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-toolbar-head h4,
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-collapse,
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-instructions,
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-pick-lbl,
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-pick-hint,
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-chips,
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-case-guide {
+  display: none !important;
+}
+.r2-has-case.r2-layout-side.r2-case-minimized .r2-open-case-title {
+  display: block;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  margin: 0;
+  max-height: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 @media (min-width: 700px) {
-  .r2-has-case.r2-layout-side .r2-split {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: stretch;
-  }
   .r2-has-case.r2-layout-stacked .r2-split { grid-template-columns: 1fr; }
   .r2-has-case.r2-layout-side .r2-case-pane,
   .r2-has-case.r2-layout-side .r2-rubric-pane {
@@ -630,10 +690,10 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
   }
 }
 @media (max-width: 699px) {
-  .r2-has-case .r2-split { grid-template-columns: 1fr; }
+  .r2-has-case.r2-layout-stacked .r2-split { grid-template-columns: 1fr; }
 }
 @container r2grade (max-width: 520px) {
-  .r2-has-case .r2-split { grid-template-columns: 1fr; }
+  .r2-has-case.r2-layout-stacked .r2-split { grid-template-columns: 1fr; }
   .r2-has-case .r2-case-pane,
   .r2-has-case .r2-rubric-pane {
     max-height: min(72vh, calc(100vh - 8rem));
