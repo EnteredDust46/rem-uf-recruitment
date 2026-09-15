@@ -354,9 +354,9 @@ def rubric_round1(round1_q):
 def rubric_round2():
     return {
         'cases': [
-            {'id': 'golden_taco', 'name': 'Golden Taco', 'industry': 'Food & Beverage', 'badge': 'Fox · Case 1'},
-            {'id': 'bean_bloom', 'name': 'Bean & Bloom', 'industry': 'Food & Beverage', 'badge': 'Fox · Case 2'},
-            {'id': 'pedal_pure', 'name': 'Pedal Pure', 'industry': 'Retail / Consumer', 'badge': 'Fox · Case 3'},
+            {'id': 'golden_taco', 'name': 'Golden Taco', 'industry': 'Food & Beverage'},
+            {'id': 'bean_bloom', 'name': 'Bean & Bloom', 'industry': 'Food & Beverage'},
+            {'id': 'pedal_pure', 'name': 'PedalPure', 'industry': 'Retail / Consumer'},
         ],
         'dims': [
             {'key': 'introduction', 'label': 'Introduction', 'levels': [
@@ -415,7 +415,7 @@ def rubric_round2():
             {'id': 'what-animal', 'title': 'What animal', 'q': 'If you could be an animal, what animal would you be?'},
         ],
         'caseInstructions': (
-            'Fox versions of the three approved Fall 2026 cases. Click a case to expand it, '
+            'Three Fall 2026 cases — Golden Taco, Bean & Bloom, and PedalPure. Click a case to expand it, '
             'select it, and run from the interviewer guide. Weight rigor to the role '
             '(Team Lead / Strategist / Junior Strategist). Play the business owner — do not '
             'name the three issues; let the candidate dig them out. Run the case first, then '

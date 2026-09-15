@@ -681,7 +681,7 @@ window.BOOTSTRAP = {"meta": {"builtAt": "2026-09-05", "applicantCount": 248, "co
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-fox-cases-20260914';
+const BUILD_STAMP = 'rd2-lean-titles-20260914';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -891,16 +891,22 @@ const R2_BEHAVIORAL_BANDS = {
   3: { label: 'Satisfactory fit', text: 'Offers a thoughtful answer that demonstrates some self-awareness and a willingness to grow.' },
   4: { label: 'Exceeding Expectations', text: 'Provides a detailed, introspective answer showing strong self-awareness and a clear point of view.' },
 };
-const R2_CASE_INSTRUCTIONS = 'Fox versions of the three approved Fall 2026 cases. Click a case to expand it, select it, and run from the interviewer guide. Weight rigor to the role (Team Lead / Strategist / Junior Strategist). Play the business owner — do not name the three issues; let the candidate dig them out. Run the case first, then 1–2 behaviorals. Score each dimension 1–4.';
+const R2_CASE_INSTRUCTIONS = 'Three Fall 2026 cases — Golden Taco, Bean & Bloom, and PedalPure. Click a case to expand it, select it, and run from the interviewer guide. Weight rigor to the role (Team Lead / Strategist / Junior Strategist). Play the business owner — do not name the three issues; let the candidate dig them out. Run the case first, then 1–2 behaviorals. Score each dimension 1–4.';
 
-// Fox interviewer guides (doc "UF FL2026 Problem Solving (Case) Interview Guide").
+const R2_CASE_TITLES = {
+  golden_taco: 'Golden Taco',
+  bean_bloom: 'Bean & Bloom',
+  pedal_pure: 'PedalPure',
+};
+
+// Interviewer guides (doc "UF FL2026 Problem Solving (Case) Interview Guide").
 // Stable ids match last year's chips so already-saved caseId values still highlight.
 const R2_CASE_FALLBACK = [
   {
     id: 'golden_taco',
     name: 'Golden Taco',
     title: 'Golden Taco',
-    badge: 'Fox · Case 1',
+    badge: '',
     industry: 'Food & Beverage',
     opening: {
       tailor: [
@@ -1004,7 +1010,7 @@ const R2_CASE_FALLBACK = [
     id: 'bean_bloom',
     name: 'Bean & Bloom',
     title: 'Bean & Bloom',
-    badge: 'Fox · Case 2',
+    badge: '',
     industry: 'Food & Beverage',
     opening: {
       tailor: [
@@ -1095,9 +1101,9 @@ const R2_CASE_FALLBACK = [
   },
   {
     id: 'pedal_pure',
-    name: 'Pedal Pure',
+    name: 'PedalPure',
     title: 'PedalPure',
-    badge: 'Fox · Case 3',
+    badge: '',
     industry: 'Retail / Consumer',
     opening: {
       tailor: [
@@ -1257,6 +1263,12 @@ function hasPendingR2CaseOp() {
   });
 }
 
+function r2CaseTitle(c) {
+  if (!c) return '';
+  if (c.id && R2_CASE_TITLES[c.id]) return R2_CASE_TITLES[c.id];
+  return String(c.title || c.name || '').trim();
+}
+
 function r2CaseList() {
   const fb = {};
   R2_CASE_FALLBACK.forEach(function (c) { fb[c.id] = c; });
@@ -1265,7 +1277,10 @@ function r2CaseList() {
     const out = [];
     fromB.forEach(function (c) {
       const full = fb[c.id];
-      if (full) out.push(Object.assign({}, full, { name: c.name || full.name }));
+      if (full) {
+        const title = r2CaseTitle(full);
+        out.push(Object.assign({}, full, { name: title, title: title, badge: '' }));
+      }
     });
     if (out.length) return out;
   }
@@ -4918,7 +4933,7 @@ function renderGrade() {
     return;
   }
 
-  const showEssays = round !== 'round1';
+  const showEssays = round === 'screen';
   const preservedEssays = showEssays ? takePreservedEl('gradeEssays', a.id) : null;
   const layout = getGradeLayout();
   const essaysMount = showEssays ? `<div class="grade-essays" id="gradeEssaysMount"></div>` : '';
@@ -5408,8 +5423,7 @@ function renderRound1Grade(a, g) {
 }
 
 function r2CaseInstructionsText() {
-  const fromB = B.rubrics && B.rubrics.round2 && B.rubrics.round2.caseInstructions;
-  return (fromB && String(fromB).trim()) ? String(fromB) : R2_CASE_INSTRUCTIONS;
+  return R2_CASE_INSTRUCTIONS;
 }
 
 function r2ScorePill(val) {
@@ -5662,7 +5676,7 @@ function r2CaseRowHtml(c, selectedId) {
   return `<div class="r2-case${open ? ' open sel' : ''}" data-case="${esc(c.id)}">
       <div class="r2-bq-bar">
         <button type="button" class="r2-bq-title" data-case="${esc(c.id)}">
-          <span class="r2-bq-label">${esc(c.title || c.name)} <span class="r2-case-badge">${esc(c.badge || 'Fox')}</span></span>
+          <span class="r2-bq-label">${esc(r2CaseTitle(c))}</span>
         </button>
         ${open ? `<button type="button" class="r2-bq-clear" data-caseclear="${esc(c.id)}">Clear</button>` : ''}
       </div>
@@ -5762,7 +5776,7 @@ function renderRound2Grade(a, g) {
       <div class="dim-head"><h4>Case review</h4>${r2ScorePill(g.caseScore)}</div>
       <div class="dim-body">
         <div class="r2-case-instructions">${esc(r2CaseInstructionsText())}</div>
-        <div class="field-label" style="margin-top:12px;">Fox case — click to expand and select</div>
+        <div class="field-label" style="margin-top:12px;">Case — click to expand and select</div>
         <div class="sub r2-bq-hint">One case per interview. Prompt first, then exhibits, then what good looks like.</div>
         <div id="r2CaseList" class="r2-bq-list">
           ${r2CaseList().map(function (c) { return r2CaseRowHtml(c, r2SelectedCaseId(g)); }).join('')}
@@ -6125,13 +6139,13 @@ function buildCsv(round) {
     header = ['Candidate (First & Last) Name', 'Case Assigned', 'Introduction', 'Framework', 'Market Sizing', 'Quant Reasoning', 'Brainstorming', 'Recommendation Dim', 'Fit & Communication', 'Final Grade / 24', 'Behaviorals asked', 'Case overall', 'Recommendation', 'Interviewer Notes'];
     rows = poolForRound('round2').map(a => {
       const g = STATE.grades.round2[a.id] || { scores: {} };
-      const caseObj = B.rubrics.round2.cases.find(c => c.id === g.caseId);
+      const caseObj = r2CaseById(g.caseId);
       const r = round2Total(g);
       const asked = r2BehavioralSelected(g).map(function (id) {
         const q = r2BehavioralById(id);
         return (q ? q.title : id) + (typeof g.scores[id] === 'number' ? ' ' + g.scores[id] : '');
       }).join(' | ');
-      return [a.name, caseObj ? caseObj.name : '', g.scores.introduction ?? '', g.scores.framework ?? '', g.scores.market_sizing ?? '', g.scores.quant_reasoning ?? '', g.scores.brainstorming ?? '', g.scores.recommendation ?? '', g.scores.fit_communication ?? '', r ? r.total : '', asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
+      return [a.name, caseObj ? r2CaseTitle(caseObj) : '', g.scores.introduction ?? '', g.scores.framework ?? '', g.scores.market_sizing ?? '', g.scores.quant_reasoning ?? '', g.scores.brainstorming ?? '', g.scores.recommendation ?? '', g.scores.fit_communication ?? '', r ? r.total : '', asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
     });
   }
   const csv = [header, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
