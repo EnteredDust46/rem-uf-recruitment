@@ -16,7 +16,7 @@ html = f"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>REM UF Recruitment</title>
+<title>Rem UF Recruitment</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -27,7 +27,7 @@ html = f"""<!doctype html>
 <body>
 <div id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
   <form id="gateForm" class="gate-card" autocomplete="off">
-    <h1 id="gateTitle">REM UF Recruitment</h1>
+    <h1 id="gateTitle">Rem UF Recruitment</h1>
     <p>Enter the recruitment password to open the dashboard.</p>
     <label class="sr-only" for="gatePassword">Password</label>
     <input type="password" id="gatePassword" name="password" autocomplete="current-password" autofocus>

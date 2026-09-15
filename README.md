@@ -1,8 +1,8 @@
-# REM UF Recruitment Dashboard
+# Rem UF Recruitment Dashboard
 
 Live at: https://EnteredDust46.github.io/rem-uf-recruitment/
 
-Single-page review dashboard for REM's Fall 2026 UF chapter recruitment (Application
+Single-page review dashboard for Rem's Fall 2026 UF chapter recruitment (Application
 Screen, First Round, Second Round). Everyone with the link can score applicants; saves
 are shared live across all viewers via the GitHub Contents API (see below) rather than
 any per-viewer local storage.

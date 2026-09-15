@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-pairs-dimnotes-20260914';
+const BUILD_STAMP = 'rd2-layout-rem-20260914';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -218,13 +218,24 @@ const R2_BEHAVIORAL_BANDS = {
   3: { label: 'Satisfactory fit', text: 'Offers a thoughtful answer that demonstrates some self-awareness and a willingness to grow.' },
   4: { label: 'Exceeding Expectations', text: 'Provides a detailed, introspective answer showing strong self-awareness and a clear point of view.' },
 };
-const R2_CASE_INSTRUCTIONS = 'Three Fall 2026 cases — Golden Taco, Bean & Bloom, and PedalPure. Click a case to expand it, select it, and run from the interviewer guide. Weight rigor to the role (Team Lead / Strategist / Junior Strategist). Play the business owner — do not name the three issues; let the candidate dig them out. Run the case first, then 1–2 behaviorals. Score each dimension 1–4.';
+const R2_CASE_INSTRUCTIONS = 'Three Fall 2026 Fox cases — Golden Taco, Bean & Bloom, and PedalPure. Select a case to open the interviewer reference. Scoring lives in the rubric and is not tied to whether the case is open. Play the business owner — do not name the three issues; let the candidate dig them out. Run the case first, then 1–2 behaviorals.';
 
 const R2_CASE_TITLES = {
   golden_taco: 'Golden Taco',
   bean_bloom: 'Bean & Bloom',
   pedal_pure: 'PedalPure',
 };
+
+const R2_CASE_SHARED_OPENING = {
+  steps: [
+    'Give a brief introduction — who you are, and a sentence about Rem.',
+    'Tell them that everything from today’s interview is confidential. They should not share it with anyone else.',
+    'Collect the candidate’s phone before you start the case, along with any notes or materials they should not have during it.',
+  ],
+};
+
+const R2_CASE_TRANSITION = 'Over the next few minutes, you’ll hear the story of a struggling business owner. As a potential member of our chapter, you’ll need to identify the problems at hand, ask questions to inform your recommendation, and propose impactful, implementable solutions. I’ll play the business owner; you’ll play a member of Rem.';
+const R2_CASE_PERSONA_NOTE = 'Adopt a fixed persona and stick to it. Don’t state the problems outright — let the candidate dig them out with questions.';
 
 // Interviewer guides (doc "UF FL2026 Problem Solving (Case) Interview Guide").
 // Stable ids match last year's chips so already-saved caseId values still highlight.
@@ -233,19 +244,12 @@ const R2_CASE_FALLBACK = [
     id: 'golden_taco',
     name: 'Golden Taco',
     title: 'Golden Taco',
+    caseNo: 1,
     badge: '',
     industry: 'Food & Beverage',
     opening: {
-      tailor: [
-        'Weight rigor to the role. Higher-responsibility roles carry more client-facing weight.',
-        'Team Lead: conceptualize ideas well and communicate them clearly.',
-        'Strategist: ask ample clarifying questions to identify the objective.',
-        'Junior Strategist: inquisitive mind and eagerness to learn.',
-      ],
-      hello: 'I’ve heard such great things from my counterpart, ________. I’d love for you to briefly tell me a bit about yourself and why you’re interested in Rem before we get into the problem-solving portion.',
-      q1: 'What are some of the issues you’ve been seeing facing the small business community?',
-      transition: 'Over the next few minutes, you’ll hear the story of a struggling business owner. As a potential member of our chapter, you’ll need to identify the problems at hand, ask questions to inform your recommendation, and propose impactful, implementable solutions. I’ll play the business owner; you’ll play a member of Rem.',
-      note: 'Adopt a fixed persona and stick to it. Don’t state the problems outright — let the candidate dig them out with questions.',
+      transition: R2_CASE_TRANSITION,
+      note: R2_CASE_PERSONA_NOTE,
     },
     about: 'Golden Taco is a cottage food business founded by Carlos and Maya, a married couple from Austin and Mexico City, selling street food at markets and local events in College Heights. Known for tacos, they’re considering a new item — Golden Bowls (same fillings, plus rice and seasonal toppings) — and want help deciding whether to launch it, and how to price and promote it.',
     facts: [
@@ -337,19 +341,12 @@ const R2_CASE_FALLBACK = [
     id: 'bean_bloom',
     name: 'Bean & Bloom',
     title: 'Bean & Bloom',
+    caseNo: 2,
     badge: '',
     industry: 'Food & Beverage',
     opening: {
-      tailor: [
-        'Weight rigor to the role. Higher-responsibility roles carry more client-facing weight.',
-        'Team Lead: conceptualize ideas well and communicate them clearly.',
-        'Strategist: ask ample clarifying questions to identify the objective.',
-        'Junior Strategist: inquisitive mind and eagerness to learn.',
-      ],
-      hello: 'I’ve heard such great things from my counterpart, ________. I’d love for you to briefly tell me a bit about yourself and why you’re interested in Rem before we get into the problem-solving portion.',
-      q1: 'What are some of the issues you’ve been seeing facing the small business community?',
-      transition: 'Over the next few minutes, you’ll hear the story of a struggling business owner. As a potential member of our chapter, you’ll need to identify the problems at hand, ask questions to inform your recommendation, and propose impactful, implementable solutions. I’ll play the business owner; you’ll play a member of Rem.',
-      note: 'Adopt a fixed persona and stick to it. Don’t state the problems outright — let the candidate dig them out with questions.',
+      transition: R2_CASE_TRANSITION,
+      note: R2_CASE_PERSONA_NOTE,
     },
     about: 'Bean & Bloom is a specialty coffee shop founded by friends Jasmine and Aiden in 2020, in Riverbend, a trendy riverside neighborhood with young professionals and college students. Known for artisan lattes, locally sourced pastries, and a cozy aesthetic, they’re now considering a new product line — Cold Brew Growlers (64 oz take-home bottles) — and want help deciding whether to launch it, and how to price and promote it.',
     facts: [
@@ -430,19 +427,12 @@ const R2_CASE_FALLBACK = [
     id: 'pedal_pure',
     name: 'PedalPure',
     title: 'PedalPure',
+    caseNo: 3,
     badge: '',
     industry: 'Retail / Consumer',
     opening: {
-      tailor: [
-        'Weight rigor to the role. Higher-responsibility roles carry more client-facing weight.',
-        'Team Lead: conceptualize ideas well and communicate them clearly.',
-        'Strategist: ask ample clarifying questions to identify the objective.',
-        'Junior Strategist: inquisitive mind and eagerness to learn.',
-      ],
-      hello: 'I’ve heard such great things from my counterpart, ________. I’d love for you to briefly tell me a bit about yourself and why you’re interested in Rem before we get into the problem-solving portion.',
-      q1: 'What are some of the issues you’ve been seeing facing the small business community?',
-      transition: 'Over the next few minutes, you’ll hear the story of a struggling business owner. As a potential member of our chapter, you’ll need to identify the problems at hand, ask questions to inform your recommendation, and propose impactful, implementable solutions. I’ll play the business owner; you’ll play a member of Rem.',
-      note: 'Adopt a fixed persona and stick to it. Don’t state the problems outright — let the candidate dig them out with questions.',
+      transition: R2_CASE_TRANSITION,
+      note: R2_CASE_PERSONA_NOTE,
     },
     about: 'PedalPure is a boutique indoor cycling studio founded by sisters Maya and Lila in 2021, in Brookdale, a neighborhood with a growing population of young professionals. Known for community-focused classes, energetic instructors, and a wellness-driven brand, they’re now considering a new product line — in-studio bottled electrolyte drinks (“PedalPure Recovery”) for post-class recovery — and want help deciding whether to launch it, and how to price and promote it.',
     facts: [
@@ -532,6 +522,8 @@ const r2BehavioralHolds = {};
 const R2_BEHAVIORAL_HOLD_MS = 30000;
 const r2CaseHolds = {};
 const R2_CASE_HOLD_MS = 30000;
+const r2CaseRefOpen = {};
+const R2_CASE_LAYOUT_KEY = 'rem-uf-r2-case-layout';
 
 function r2BehavioralList() {
   const fromB = B.rubrics && B.rubrics.round2 && B.rubrics.round2.behaviorals;
@@ -653,6 +645,42 @@ function r2SelectedCaseId(g) {
   }
   if (g && g.caseId && r2KnownCaseId(g.caseId)) return g.caseId;
   return '';
+}
+
+function isR2CaseRefOpen(id) {
+  const aid = id || STATE.currentApplicantId;
+  if (!aid) return true;
+  return r2CaseRefOpen[aid] !== false;
+}
+
+function setR2CaseRefOpen(id, on) {
+  if (!id) return;
+  r2CaseRefOpen[id] = !!on;
+}
+
+function getR2CaseLayout() {
+  try {
+    const v = localStorage.getItem(R2_CASE_LAYOUT_KEY);
+    if (v === 'side' || v === 'stacked') return v;
+  } catch (e) { /* private mode */ }
+  return 'side';
+}
+
+function setR2CaseLayout(layout) {
+  try { localStorage.setItem(R2_CASE_LAYOUT_KEY, layout === 'stacked' ? 'stacked' : 'side'); } catch (e) { /* ignore */ }
+}
+
+function applyR2CaseLayout(layout) {
+  const next = layout === 'stacked' ? 'stacked' : 'side';
+  const root = document.getElementById('r2GradeRoot');
+  if (root) {
+    root.classList.toggle('r2-layout-side', next === 'side');
+    root.classList.toggle('r2-layout-stacked', next === 'stacked');
+  }
+  if (!contentEl) return;
+  contentEl.querySelectorAll('[data-r2layout]').forEach(function (btn) {
+    btn.classList.toggle('active', btn.dataset.r2layout === next);
+  });
 }
 
 function shouldHoldR2AgainstPoll() {
@@ -1207,10 +1235,8 @@ function captureOpenR2Fields() {
   if (hasR2CaseHold(STATE.currentApplicantId)) {
     g.caseId = heldR2Case(STATE.currentApplicantId) || undefined;
   } else {
-    const openCase = main.querySelector('.r2-case.open[data-case]');
-    if (openCase && openCase.dataset.case && r2KnownCaseId(openCase.dataset.case)) {
-      g.caseId = openCase.dataset.case;
-    }
+    const liveCase = liveR2CaseId(main);
+    if (liveCase) g.caseId = liveCase;
   }
   const openIds = [];
   main.querySelectorAll('.r2-bq.open[data-bqid]').forEach(function (row) {
@@ -1806,7 +1832,46 @@ function round2Total(g) {
   const scores = (g && g.scores) || {};
   const vals = dims.map(function (k) { return scores[k]; }).filter(function (v) { return typeof v === 'number'; });
   if (!vals.length) return null;
-  return { total: vals.reduce(function (a, b) { return a + b; }, 0), max: 24, count: vals.length };
+  const sum = vals.reduce(function (a, b) { return a + b; }, 0);
+  return { total: sum / vals.length, max: 4, count: vals.length, sum: sum };
+}
+
+function r2BehavioralScoreKeys(g) {
+  const selected = r2BehavioralSelected(g);
+  const scores = (g && g.scores) || {};
+  if (selected && selected.length) return selected;
+  return r2BehavioralList().map(function (q) { return q.id; }).filter(function (id) {
+    return typeof scores[id] === 'number';
+  });
+}
+
+function round2BehavioralAvg(g) {
+  const scores = (g && g.scores) || {};
+  const vals = r2BehavioralScoreKeys(g).map(function (id) { return scores[id]; }).filter(function (v) {
+    return typeof v === 'number';
+  });
+  if (!vals.length) return null;
+  return vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+}
+
+function hasRound2Score(g) {
+  return !!(round2Total(g) || round2BehavioralAvg(g));
+}
+
+function formatR2Avg(v) {
+  if (v == null || isNaN(v)) return '—';
+  return Math.round(v * 10) % 10 === 0 ? String(Math.round(v)) : v.toFixed(1);
+}
+
+function formatRound2ScorePairHtml(applicantId) {
+  const g = STATE.grades.round2[applicantId];
+  const caseT = round2Total(g);
+  const beh = round2BehavioralAvg(g);
+  return '<span class="r2-list-scores">'
+    + '<span class="r2-list-case">' + formatR2Avg(caseT && caseT.total) + ' case</span>'
+    + '<span class="r2-list-sep"> · </span>'
+    + '<span class="r2-list-beh">' + formatR2Avg(beh) + ' beh</span>'
+    + '</span>';
 }
 
 // An auto-filled academics score on its own doesn't make someone "reviewed" — a person
@@ -2606,6 +2671,10 @@ function sortApplicantList(list, round) {
       else if (round === 'round1') { av = round1BlendScore(a.id) ?? -1; bv = round1BlendScore(b.id) ?? -1; }
       else { av = scoreFor(round, a.id) ?? -1; bv = scoreFor(round, b.id) ?? -1; }
     }
+    else if (STATE.sortKey === 'beh') {
+      av = round2BehavioralAvg(STATE.grades.round2[a.id]) ?? -1;
+      bv = round2BehavioralAvg(STATE.grades.round2[b.id]) ?? -1;
+    }
     else if (STATE.sortKey === 'r1std') { av = standardizedRound1Score(a.id) ?? -1; bv = standardizedRound1Score(b.id) ?? -1; }
     else if (STATE.sortKey === 'group') {
       if (round === 'round1') { av = interviewerName(r1InterviewerId(a.id)) || ''; bv = interviewerName(r1InterviewerId(b.id)) || ''; }
@@ -2863,12 +2932,51 @@ function setGradeLayout(layout) {
 }
 
 function layoutToggleHtml() {
+  if (STATE.gradeRound === 'round2') {
+    const layout = getR2CaseLayout();
+    return `<div class="layout-toggle" role="group" aria-label="Case and rubric layout">
+      <span class="layout-toggle-lbl">Case layout</span>
+      <button type="button" class="chip ${layout === 'stacked' ? 'active' : ''}" data-r2layout="stacked">Stacked</button>
+      <button type="button" class="chip ${layout === 'side' ? 'active' : ''}" data-r2layout="side">Side</button>
+    </div>`;
+  }
   const layout = getGradeLayout();
   return `<div class="layout-toggle" role="group" aria-label="Grade layout">
     <span class="layout-toggle-lbl">Layout</span>
     <button type="button" class="chip ${layout === 'stacked' ? 'active' : ''}" data-layout="stacked">Stacked</button>
     <button type="button" class="chip ${layout === 'side' ? 'active' : ''}" data-layout="side">Side</button>
   </div>`;
+}
+
+function captureR2PaneScroll() {
+  const casePane = document.getElementById('r2CasePane');
+  const rubricPane = document.getElementById('r2RubricPane');
+  const guide = document.getElementById('r2CaseGuide');
+  return {
+    caseId: guide ? (guide.getAttribute('data-case') || '') : '',
+    caseTop: casePane ? casePane.scrollTop : 0,
+    rubricTop: rubricPane ? rubricPane.scrollTop : 0,
+  };
+}
+
+function restoreR2PaneScroll(snap) {
+  if (!snap) return;
+  const guide = document.getElementById('r2CaseGuide');
+  const caseId = guide ? (guide.getAttribute('data-case') || '') : '';
+  const casePane = document.getElementById('r2CasePane');
+  const rubricPane = document.getElementById('r2RubricPane');
+  if (rubricPane && typeof snap.rubricTop === 'number') rubricPane.scrollTop = snap.rubricTop;
+  if (casePane && caseId === snap.caseId && typeof snap.caseTop === 'number') casePane.scrollTop = snap.caseTop;
+}
+
+function liveR2CaseId(root) {
+  const scope = root || document;
+  const guide = document.getElementById('r2CaseGuide');
+  const fromGuide = guide && guide.getAttribute('data-case');
+  if (fromGuide && r2KnownCaseId(fromGuide)) return fromGuide;
+  const openCase = scope.querySelector && scope.querySelector('.r2-case.open[data-case]');
+  if (openCase && openCase.dataset.case && r2KnownCaseId(openCase.dataset.case)) return openCase.dataset.case;
+  return '';
 }
 
 function gradeViewKey() {
@@ -2889,6 +2997,7 @@ function captureGradeScroll() {
     mainTop: main ? main.scrollTop : 0,
     contentTop: contentEl ? contentEl.scrollTop : 0,
     essays: essays,
+    r2panes: captureR2PaneScroll(),
   };
 }
 
@@ -2903,6 +3012,7 @@ function restoreGradeScroll(snap) {
       el.scrollTop = snap.essays[id];
     }
   });
+  restoreR2PaneScroll(snap.r2panes);
 }
 
 let lastGradeKey = null;
@@ -2934,16 +3044,58 @@ function render() {
   }
 }
 
+const NAV_COLLAPSE_KEY = 'rem-uf-nav-collapsed';
+const RAIL_ICONS = {
+  overview: 'Ov',
+  'round:screen': 'AS',
+  'round:round1': 'R1',
+  'round:round2': 'R2',
+  flagged: '!',
+  groups: 'Gr',
+  export: 'Ex',
+};
+
+function getNavCollapsed() {
+  try { return localStorage.getItem(NAV_COLLAPSE_KEY) === '1'; } catch (e) { return false; }
+}
+
+function applyNavCollapsed(on) {
+  document.body.classList.toggle('nav-collapsed', !!on);
+  const btn = document.getElementById('railCollapseBtn');
+  if (btn) {
+    btn.setAttribute('aria-expanded', on ? 'false' : 'true');
+    btn.setAttribute('aria-label', on ? 'Expand navigation' : 'Collapse navigation');
+    btn.title = on ? 'Expand navigation' : 'Collapse navigation';
+  }
+}
+
+function setNavCollapsed(on) {
+  applyNavCollapsed(on);
+  try { localStorage.setItem(NAV_COLLAPSE_KEY, on ? '1' : '0'); } catch (e) { /* private mode */ }
+}
+
+applyNavCollapsed(getNavCollapsed());
+
 function railBtn(id, label, count) {
   const active = STATE.view === id || (STATE.view.startsWith(id + ':') );
-  return `<button class="rail-btn ${active ? 'active' : ''}" data-nav="${id}">
-    <span>${label}</span>${count != null ? `<span class="count">${count}</span>` : ''}
+  const ico = RAIL_ICONS[id] || String(label || '').slice(0, 2);
+  return `<button class="rail-btn ${active ? 'active' : ''}" data-nav="${id}" title="${esc(label)}">
+    <span class="rail-ico" aria-hidden="true">${esc(ico)}</span>
+    <span class="rail-lbl">${esc(label)}</span>${count != null ? `<span class="count">${count}</span>` : ''}
   </button>`;
 }
 
 function renderRail() {
+  const collapsed = getNavCollapsed();
   railEl.innerHTML = `
-    <div class="rail-brand">REM · UF<span class="sub">Fall 2026 Recruitment</span></div>
+    <div class="rail-head">
+      <div class="rail-brand">
+        <span class="rail-brand-full">Rem · UF</span>
+        <span class="rail-brand-mini" aria-hidden="true">Rem</span>
+        <span class="sub">Fall 2026 Recruitment</span>
+      </div>
+      <button type="button" class="rail-collapse" id="railCollapseBtn" aria-expanded="${collapsed ? 'false' : 'true'}" aria-label="${collapsed ? 'Expand navigation' : 'Collapse navigation'}" title="${collapsed ? 'Expand navigation' : 'Collapse navigation'}">${collapsed ? '›' : '‹'}</button>
+    </div>
     ${railBtn('overview', 'Overview')}
     <div class="rail-group">Rounds</div>
     ${railBtn('round:screen', ROUND_LABEL.screen, STATE.applicants.length)}
@@ -2954,10 +3106,11 @@ function renderRail() {
     ${railBtn('groups', 'Review Groups')}
     ${railBtn('export', 'Export')}
     <div class="rail-foot">
-      <div><span class="dot"></span>${B.applicants.length} applicants at build · ${STATE.applicants.length} now</div>
-      <button type="button" class="sub" style="margin-top:4px; cursor:pointer; background:none; border:none; color:inherit; font:inherit; padding:0; text-align:left;" id="buildStamp" title="Re-render">${BUILD_STAMP}</button>
+      <div class="rail-foot-copy"><span class="dot"></span>${B.applicants.length} applicants at build · ${STATE.applicants.length} now</div>
+      <button type="button" class="sub rail-stamp" id="buildStamp" title="Re-render">${BUILD_STAMP}</button>
     </div>
   `;
+  applyNavCollapsed(collapsed);
   railEl.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => {
     STATE.view = b.dataset.nav;
     STATE.currentApplicantId = null;
@@ -2967,12 +3120,18 @@ function renderRail() {
     else STATE.flaggedOnly = false;
     render();
   }));
+  const collapseBtn = document.getElementById('railCollapseBtn');
+  if (collapseBtn) collapseBtn.addEventListener('click', function (evt) {
+    if (evt) { evt.preventDefault(); evt.stopPropagation(); }
+    setNavCollapsed(!getNavCollapsed());
+    collapseBtn.textContent = getNavCollapsed() ? '›' : '‹';
+  });
   const stamp = document.getElementById('buildStamp');
   if (stamp) stamp.addEventListener('click', function () { render(); });
 }
 
 function renderTopbar() {
-  let title = 'Overview', eyebrow = 'REM UF Recruitment';
+  let title = 'Overview', eyebrow = 'Rem UF Recruitment';
   if (STATE.view.startsWith('round:')) {
     const round = STATE.view.split(':')[1];
     title = ROUND_LABEL[round]; eyebrow = ROUND_SUB[round];
@@ -2996,8 +3155,10 @@ function renderContent() {
     contentEl.classList.add('grade-wide');
     contentEl.classList.toggle('grade-layout-side', getGradeLayout() === 'side');
     contentEl.classList.toggle('grade-layout-stacked', getGradeLayout() !== 'side');
+    contentEl.classList.toggle('r2-grade-page', STATE.gradeRound === 'round2');
+    if (STATE.gradeRound !== 'round2') contentEl.classList.remove('r2-case-open');
   } else {
-    contentEl.classList.remove('grade-wide', 'grade-layout-side', 'grade-layout-stacked');
+    contentEl.classList.remove('grade-wide', 'grade-layout-side', 'grade-layout-stacked', 'r2-grade-page', 'r2-case-open');
   }
   if (STATE.view === 'overview') return renderOverview();
   if (STATE.view === 'flagged') return renderFlaggedList();
@@ -3024,7 +3185,7 @@ function renderOverview() {
   const r1Pool = poolForRound('round1');
   const r1Scored = r1Pool.filter(a => scoreFor('round1', a.id) !== null).length;
   const r2Pool = poolForRound('round2');
-  const r2Scored = r2Pool.filter(a => scoreFor('round2', a.id) !== null).length;
+  const r2Scored = r2Pool.filter(function (a) { return hasRound2Score(STATE.grades.round2[a.id]); }).length;
   const coffeeCount = STATE.applicants.filter(a => a.attendance && a.attendance.coffeeChats && a.attendance.coffeeChats.length).length;
   const infoCount = STATE.applicants.filter(a => a.attendance && a.attendance.infoSession).length;
   const meetCount = STATE.applicants.filter(a => a.attendance && a.attendance.meetMembers).length;
@@ -3048,7 +3209,7 @@ function renderOverview() {
       ${statTile('Total applicants', total, `${STATE.applicants.length - B.applicants.length > 0 ? '+' + (STATE.applicants.length - B.applicants.length) + ' since build' : 'UF chapter'}`)}
       ${statTile('Application Screen', `${screenScored}/${total}`, 'scored', 'round:screen')}
       ${statTile('First Round', `${r1Scored}/${r1Pool.length}`, hasExplicitAdvance() ? 'scored · explicit advance set' : `scored · everyone until you Apply top N`, 'round:round1')}
-      ${statTile('Second Round pool', `${r2Scored}/${r2Pool.length}`, hasExplicitAdvanceRd2() ? 'scored · explicit Rd2 set' : 'everyone in First Round until you Apply top N', 'round:round2')}
+      ${statTile('Second Round pool', `${r2Scored}/${r2Pool.length}`, hasExplicitAdvanceRd2() ? 'case or behavioral scored · explicit Rd2 set' : 'everyone in First Round until you Apply top N', 'round:round2')}
       ${statTile('Flagged for 2nd review', flaggedCount, flaggedCount ? 'open the flagged list' : 'none flagged yet', 'flagged')}
       ${statTile('Coffee chat contact', coffeeCount, `of ${total} applicants`)}
       ${statTile('Meet the Members', meetCount, `of ${total} applicants`)}
@@ -3367,7 +3528,7 @@ function refreshAdvanceRd2Ui() {
     }
   }
   const r2Pool = poolForRound('round2');
-  const r2Scored = r2Pool.filter(function (a) { return scoreFor('round2', a.id) !== null; }).length;
+  const r2Scored = r2Pool.filter(function (a) { return hasRound2Score(STATE.grades.round2[a.id]); }).length;
   const tile = document.querySelector('[data-stat="round:round2"]');
   if (tile) {
     const valueEl = tile.querySelector('.value');
@@ -4066,9 +4227,10 @@ function applyLiveR2GradeUpdate() {
   const a = STATE.byId[STATE.currentApplicantId];
   const main = document.getElementById('gradeMain');
   if (!a || !main) return;
+  const paneSnap = captureR2PaneScroll();
   const g = getGrade('round2', a.id);
   syncR2BehavioralRows(main, g, a);
-  syncR2CaseRows(main, g, a);
+  syncR2CaseRows(main, g, a, { keepCaseScroll: true });
   const R = B.rubrics.round2;
   (R.dims || []).forEach(function (d) { updateR2ScoreUI(main, g, d.key); });
   if (R.fitDim) updateR2ScoreUI(main, g, R.fitDim.key);
@@ -4085,6 +4247,7 @@ function applyLiveR2GradeUpdate() {
   });
   syncR2AssignFields(g);
   updateHeaderScore('round2', g, a);
+  restoreR2PaneScroll(paneSnap);
 }
 
 function pollShouldRemountOverview(advanceChanged) {
@@ -4292,7 +4455,7 @@ function filteredFlaggedPool() {
 }
 
 function roundListRowsHtml(round, list) {
-  const cols = round === 'round1' ? 8 : round === 'round2' ? 6 : 6;
+  const cols = round === 'round1' ? 8 : round === 'round2' ? 7 : 6;
   return list.map(a => renderRow(round, a)).join('') || `<tr><td colspan="${cols}"><div class="empty-state">${emptyRoundMessage(round)}</div></td></tr>`;
 }
 
@@ -4304,7 +4467,7 @@ function flaggedListRowsHtml(list) {
       <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${flagBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.gradYear)}</span></div></td>
       <td>${gpaCell(a)}</td>
       <td>${esc(ROUND_LABEL[round] || round)}</td>
-      <td><span class="score-pill${(round === 'screen' || round === 'round1') && score !== null ? ' pair' : ''}">${score === null ? '—' : (round === 'round2' ? score : round === 'screen' ? formatScreenScorePairHtml(a.id) : formatRound1ScorePairHtml(a.id))}</span></td>
+      <td><span class="score-pill${(round === 'screen' || round === 'round1') && score !== null ? ' pair' : ''}">${score === null && round !== 'round2' ? '—' : (round === 'round2' ? formatRound2ScorePairHtml(a.id) : round === 'screen' ? formatScreenScorePairHtml(a.id) : formatRound1ScorePairHtml(a.id))}</span></td>
     </tr>`;
   }).join('') || `<tr><td colspan="4"><div class="empty-state">No one is flagged for a second reviewer.</div></td></tr>`;
 }
@@ -4481,7 +4644,8 @@ function renderRoundList(round) {
           <th data-sort="time" class="${STATE.sortKey === 'time' ? 'sorted' : ''}">Time</th>
           <th data-sort="room" class="${STATE.sortKey === 'room' ? 'sorted' : ''}">Room</th>
           <th data-sort="r1score" class="${STATE.sortKey === 'r1score' || STATE.sortKey === 'gpa' ? 'sorted' : ''}" title="First Round average and interviewer-standardized score">R1 avg</th>
-          <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}">Case /24</th>`
+          <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}" title="Average of scored case dimensions / 4">Case /4</th>
+          <th data-sort="beh" class="${STATE.sortKey === 'beh' ? 'sorted' : ''}" title="Average of selected scored behaviorals / 4">Beh /4</th>`
       : `<th data-sort="name" class="${STATE.sortKey === 'name' ? 'sorted' : ''}">Applicant</th>
           <th data-sort="gpa" class="${STATE.sortKey === 'gpa' ? 'sorted' : ''}">GPA</th>
           <th>Position</th>
@@ -4624,7 +4788,7 @@ function thankBadge(a) {
 
 function renderRow(round, a) {
   const score = scoreFor(round, a.id);
-  const maxScale = round === 'round2' ? 24 : round === 'screen' ? 5 : 4;
+  const maxScale = round === 'screen' ? 5 : 4;
   const scoreClass = score === null ? 'none' : (round === 'round1' && score < 3) ? 'bad' : (round !== 'round1' && score >= maxScale * 0.75) ? 'good' : '';
   if (round === 'round1') {
     const g = STATE.grades.round1[a.id] || {};
@@ -4647,13 +4811,18 @@ function renderRow(round, a) {
     const pair = r2PairLabel(r2Interviewers(a.id));
     const time = formatInterviewTime(r2InterviewTime(a.id));
     const room = r2InterviewRoom(a.id);
+    const caseT = round2Total(STATE.grades.round2[a.id]);
+    const beh = round2BehavioralAvg(STATE.grades.round2[a.id]);
+    const caseClass = caseT ? (caseT.total >= 3 ? 'good' : '') : 'none';
+    const behClass = beh == null ? 'none' : (beh >= 3 ? 'good' : '');
     return `<tr class="clickable" role="button" tabindex="0" data-id="${a.id}">
-      <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${flagBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.major || '')}</span></div></td>
+      <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${flagBadge(a)}</span><span class="sub">${esc(a.classYear)} · ${esc(a.major || '')}</span></div></td>
       <td>${pair ? esc(pair) : '<span class="unassigned-pill">Unassigned</span>'}</td>
       <td>${time ? esc(time) : '<span class="sub">—</span>'}</td>
       <td>${room ? esc(room) : '<span class="sub">—</span>'}</td>
       <td><span class="score-pill pair">${formatRound1ScorePairHtml(a.id)}</span></td>
-      <td><span class="score-pill ${scoreClass}">${score === null ? '—' : score}</span></td>
+      <td><span class="score-pill ${caseClass}" title="Mean of scored case dimensions">${formatR2Avg(caseT && caseT.total)}</span></td>
+      <td><span class="score-pill ${behClass}" title="Mean of selected scored behaviorals">${formatR2Avg(beh)}</span></td>
     </tr>`;
   }
   const grp = assignmentGroup(round, a.id);
@@ -4718,8 +4887,15 @@ function renderGrade() {
   const showEssays = round === 'screen';
   const preservedEssays = showEssays ? takePreservedEl('gradeEssays', a.id) : null;
   const layout = getGradeLayout();
+  const r2OpenId = round === 'round2' ? r2SelectedCaseId(g) : '';
+  const r2OpenTitle = r2OpenId ? r2CaseTitle(r2CaseById(r2OpenId)) : '';
+  const r2RefOpen = round === 'round2' && !!r2OpenId && isR2CaseRefOpen(a.id);
+  contentEl.classList.toggle('r2-grade-page', round === 'round2');
+  contentEl.classList.toggle('r2-case-open', r2RefOpen);
   const essaysMount = showEssays ? `<div class="grade-essays" id="gradeEssaysMount"></div>` : '';
-  const body = layout === 'side'
+  const body = round === 'round2'
+    ? `<div id="gradeMain"></div>`
+    : layout === 'side'
     ? `<div class="two-col grade-layout-side">
         <div id="gradeMain"></div>
         <div class="side-stack" id="gradeSideCol">
@@ -4752,7 +4928,7 @@ function renderGrade() {
     </div>
     <div class="applicant-header" style="margin-top:10px;">
       <div>
-        <h2>${esc(a.name)}${lateBadge(a)}${round === 'round1' ? knowBadge(a) : ''}<span id="knowFlagBadgeHost"></span></h2>
+        <h2>${esc(a.name)}${lateBadge(a)}${round === 'round1' ? knowBadge(a) : ''}<span id="knowFlagBadgeHost"></span>${round === 'round2' ? `<span class="chip accent2 static r2-header-case" id="r2HeaderCase"${r2OpenTitle ? '' : ' hidden'}>${esc(r2OpenTitle)}</span>` : ''}</h2>
         <div class="meta">
           <span>🎓 ${esc(a.university)}</span>
           <span>${esc(a.classYear)} · Class of ${esc(a.gradYear)}</span>
@@ -4781,6 +4957,13 @@ function renderGrade() {
       render();
     });
   });
+  contentEl.querySelectorAll('[data-r2layout]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (btn.dataset.r2layout === getR2CaseLayout()) return;
+      setR2CaseLayout(btn.dataset.r2layout);
+      applyR2CaseLayout(getR2CaseLayout());
+    });
+  });
   bindR1AssignControls(a, g);
   bindR2AssignControls(a);
   const knowBtn = document.getElementById('knowPersonBtn');
@@ -4792,7 +4975,7 @@ function renderGrade() {
   else renderRound2Grade(a, g);
 
   if (showEssays) mountGradeEssays(a, preservedEssays);
-  renderGradeSide(a, round, g);
+  if (round !== 'round2') renderGradeSide(a, round, g);
 }
 
 function r1AssignBlockHtml(a, g) {
@@ -4858,7 +5041,7 @@ function fmtScore(round, g, a) {
     const v = screenAverage(g, a); return v === null ? '—' : v.toFixed(1);
   }
   if (round === 'round1') { const v = round1Average(g); return v === null ? '—' : v.toFixed(1); }
-  const r = round2Total(g); return r ? r.total : '—';
+  const r = round2Total(g); return r ? formatR2Avg(r.total) : '—';
 }
 
 function headerScoreInner(round, g, a) {
@@ -4881,8 +5064,12 @@ function headerScoreInner(round, g, a) {
     return '<span class="big">' + v.toFixed(1) + '</span><span class="of">/ 4 raw</span>'
       + '<span class="std-inline" title="raw − interviewer mean + overall mean">' + std.toFixed(1) + ' std</span>';
   }
-  const of = '/ 24';
-  return '<span class="big">' + fmtScore(round, g, a) + '</span><span class="of">' + of + '</span>';
+  const caseT = round2Total(g);
+  const beh = round2BehavioralAvg(g);
+  return '<span class="r2-hdr-scores">'
+    + '<span class="r2-hdr-score"><span class="big">' + formatR2Avg(caseT && caseT.total) + '</span><span class="of">/ 4 case</span></span>'
+    + '<span class="r2-hdr-score"><span class="big">' + formatR2Avg(beh) + '</span><span class="of">/ 4 beh</span></span>'
+    + '</span>';
 }
 
 function scoreSelector(round, applicantId, key, scale, onSet) {
@@ -5262,6 +5449,7 @@ function persistR2BehavioralSelected(a, selected) {
   holdR2Behaviorals(a.id, rec.behavioralSelected);
   if (rec.qnotes) saveGrade('round2', a.id, 'qnotes', null, cloneJson(rec.qnotes));
   saveGrade('round2', a.id, 'behavioralSelected', null, rec.behavioralSelected.slice());
+  updateHeaderScore('round2', rec, a);
   return rec;
 }
 
@@ -5373,11 +5561,22 @@ function syncR2BehavioralRows(container, g, a) {
     }
     if (shouldOpen) bindR2BehavioralRow(row, a);
   });
+  if (a) updateHeaderScore('round2', g, a);
 }
 
 function r2CaseListHtml(items) {
   if (!items || !items.length) return '';
   return '<ul class="r2-case-ul">' + items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+}
+
+function r2CaseOlHtml(items) {
+  if (!items || !items.length) return '';
+  return '<ol class="r2-case-ol">' + items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>';
+}
+
+function r2CaseQuoteHtml(text) {
+  if (!text) return '';
+  return '<blockquote class="r2-case-quote">' + esc(text) + '</blockquote>';
 }
 
 function r2CaseTableHtml(headers, rows) {
@@ -5393,85 +5592,176 @@ function r2CaseTableHtml(headers, rows) {
 
 function r2CaseBodyHtml(c) {
   const o = c.opening || {};
-  const steers = (c.steers || []).map(function (s) {
-    return '<div class="r2-case-steer"><div class="r2-case-when">' + esc(s.when) + '</div><div class="prompt">' + esc(s.say) + '</div></div>';
-  }).join('');
+  const n = c.caseNo ? ('Case ' + c.caseNo + ' · ') : '';
+  const title = r2CaseTitle(c);
   const asked = (c.ifAsked || []).map(function (row) {
-    return '<div class="r2-case-qa"><div class="r2-case-q">' + esc(row.q) + '</div><div class="r2-case-a">' + esc(row.a) + '</div></div>';
+    return '<div class="r2-case-qa"><p><strong>' + esc(row.q) + '</strong> ' + esc(row.a) + '</p></div>';
+  }).join('');
+  const steers = (c.steers || []).map(function (s) {
+    return '<div class="r2-case-steer"><p class="r2-case-when">' + esc(s.when) + '</p>' + r2CaseQuoteHtml(s.say) + '</div>';
   }).join('');
   const explore = (c.explore || []).map(function (ex) {
-    return '<div class="r2-case-explore"><div class="r2-case-when">' + esc(ex.label) + '</div>' + r2CaseListHtml(ex.items) + '</div>';
+    return '<div class="r2-case-explore"><p class="r2-case-k"><strong>' + esc(ex.label) + '</strong></p>' + r2CaseListHtml(ex.items) + '</div>';
   }).join('');
-  const quant = (c.quant || []).map(function (step) {
+  const quant = (c.quant || []).map(function (step, i) {
     return '<div class="r2-case-step">' +
-      '<div class="r2-case-step-h">' + esc(step.title) + '</div>' +
-      (step.say ? '<div class="read-aloud">Read aloud</div><div class="prompt">' + esc(step.say) + '</div>' : '') +
-      (step.answers && step.answers.length ? '<div class="r2-case-key"><div class="r2-case-when">What good looks like</div>' + r2CaseListHtml(step.answers) + '</div>' : '') +
-      (step.note ? '<div class="r2-case-note">' + esc(step.note) + '</div>' : '') +
+      '<h4>' + (step.title ? esc(step.title) : ('Step ' + (i + 1))) + '</h4>' +
+      (step.say ? r2CaseQuoteHtml(step.say) : '') +
+      (step.answers && step.answers.length ? '<p class="r2-case-when">Expected calculation</p>' + r2CaseListHtml(step.answers) : '') +
+      (step.note ? '<p class="r2-case-note"><strong>Interviewer note.</strong> ' + esc(step.note) + '</p>' : '') +
       '</div>';
   }).join('');
-  return `<div class="r2-case-body">
-      <div class="r2-case-sec">
-        <h5>Opening</h5>
-        <div class="sub">${esc((o.tailor || []).join(' '))}</div>
-        <div class="read-aloud">Read aloud</div>
-        <div class="prompt">${esc(o.hello || '')}</div>
-        <div class="read-aloud">Read aloud</div>
-        <div class="prompt">${esc(o.q1 || '')}</div>
-        <div class="read-aloud">Read aloud</div>
-        <div class="prompt">${esc(o.transition || '')}</div>
-        ${o.note ? `<div class="r2-case-note">${esc(o.note)}</div>` : ''}
-      </div>
-      <div class="r2-case-sec">
-        <h5>Framework</h5>
-        <div class="prompt" style="font-size:15px;">${esc(c.about || '')}</div>
-        <div class="r2-case-when">Quick facts</div>
+  const openingSteps = r2CaseOlHtml(R2_CASE_SHARED_OPENING.steps);
+  const transition = o.transition || R2_CASE_TRANSITION;
+  const persona = o.note || R2_CASE_PERSONA_NOTE;
+  return `<article class="r2-case-body r2-case-doc">
+      <p class="r2-case-kicker">Problem Solving Interview (Fox)</p>
+      <h2>${esc(n + title)}</h2>
+      <section class="r2-case-sec">
+        <h3>Before the case</h3>
+        ${openingSteps}
+        <p class="r2-case-when">Then begin the case</p>
+        ${r2CaseQuoteHtml(transition)}
+        ${persona ? `<p class="r2-case-note"><strong>Interviewer note.</strong> ${esc(persona)}</p>` : ''}
+      </section>
+      <section class="r2-case-sec">
+        <h3>Framework</h3>
+        <p><strong>About the business.</strong> ${esc(c.about || '')}</p>
+        <p class="r2-case-when">Quick facts</p>
         ${r2CaseListHtml(c.facts)}
-        <div class="r2-case-when">Give if asked</div>
+        <p class="r2-case-when">Info to give if asked</p>
         ${asked}
-        <div class="r2-case-when">Steer toward these 3 issues — do not name them</div>
-        ${r2CaseListHtml(c.issues)}
+        <p class="r2-case-when">3 main issues — steer toward these; do not name them</p>
+        ${r2CaseOlHtml(c.issues)}
         ${steers}
-        ${explore ? '<div class="r2-case-when">They may also explore</div>' + explore : ''}
-      </div>
-      <div class="r2-case-sec">
-        <h5>Quant</h5>
-        <div class="read-aloud">Read aloud</div>
-        <div class="prompt">${esc(c.quantIntro || '')}</div>
-        ${c.exhibitNote ? `<div class="r2-case-note">${esc(c.exhibitNote)}</div>` : ''}
+        ${explore ? '<p class="r2-case-when">Additional questions candidates may explore</p>' + explore : ''}
+      </section>
+      <section class="r2-case-sec">
+        <h3>Quant section</h3>
+        ${r2CaseQuoteHtml(c.quantIntro || '')}
+        ${c.exhibitNote ? `<p class="r2-case-note"><strong>Interviewer note.</strong> ${esc(c.exhibitNote)}</p>` : ''}
         ${r2CaseTableHtml(c.exhibitHeaders, c.exhibitRows)}
-        ${c.exhibitFoot ? `<div class="r2-case-foot">${esc(c.exhibitFoot)}</div>` : ''}
+        ${c.exhibitFoot ? `<p class="r2-case-foot">${esc(c.exhibitFoot)}</p>` : ''}
         ${quant}
+      </section>
+      <section class="r2-case-sec">
+        <h3>Brainstorm</h3>
+        ${r2CaseQuoteHtml((c.brainstorm && c.brainstorm.say) || '')}
+        ${c.brainstorm && c.brainstorm.hints ? `<p class="r2-case-note">${esc(c.brainstorm.hints)}</p>` : ''}
+      </section>
+      <section class="r2-case-sec">
+        <h3>Conclusion</h3>
+        ${r2CaseQuoteHtml((c.conclusion && c.conclusion.say) || '')}
+        <p class="r2-case-when">Expected synthesis</p>
+        ${r2CaseListHtml((c.conclusion && c.conclusion.expected) || [])}
+      </section>
+    </article>`;
+}
+
+function r2CaseRowHtml(c, selectedId, expanded) {
+  const sel = selectedId === c.id;
+  const open = sel && !!expanded;
+  return `<div class="r2-case${sel ? ' sel' : ''}${open ? ' open' : ''}" data-case="${esc(c.id)}">
+      <div class="r2-bq-bar">
+        <button type="button" class="r2-bq-title" data-case="${esc(c.id)}" title="${esc(r2CaseTitle(c))}">
+          <span class="r2-bq-label">${esc(r2CaseTitle(c))}</span>
+        </button>
+        ${open ? `<button type="button" class="r2-bq-clear" data-caseclear="${esc(c.id)}">Clear</button>` : ''}
       </div>
-      <div class="r2-case-sec">
-        <h5>Brainstorm</h5>
-        <div class="read-aloud">Read aloud</div>
-        <div class="prompt">${esc((c.brainstorm && c.brainstorm.say) || '')}</div>
-        ${c.brainstorm && c.brainstorm.hints ? `<div class="r2-case-note">${esc(c.brainstorm.hints)}</div>` : ''}
+    </div>`;
+}
+
+function r2CaseNotesHtml(g) {
+  return `
+    <div class="card card-pad r2-case-notes-card">
+      <div class="field-label">Case notes</div>
+      <div class="notes-field"><textarea id="r2CaseNotes" data-notekey="__case" placeholder="Walkthrough notes, standout moments, gaps…">${esc(g.caseNotes || '')}</textarea></div>
+    </div>`;
+}
+
+function r2ProfileFooterHtml(a) {
+  const v = getVouch(a.id);
+  const att = a.attendance || {};
+  const chats = att.coffeeChats || [];
+  const cc = chats.length > 0;
+  const info = !!att.infoSession;
+  const meet = !!att.meetMembers;
+  return `<div class="r2-profile-footer vouch-card ${v.by.length ? 'has' : ''}">
+      <div class="r2-meta-pills">
+        <span class="r2-meta-pill${cc ? ' on' : ''}" title="${esc(cc ? (chats.length + ' coffee chat' + (chats.length > 1 ? 's' : '')) : 'No coffee chat')}">☕ Coffee${cc ? '' : ' —'}</span>
+        <span class="r2-meta-pill${info ? ' on' : ''}">🎤 Info session${info ? '' : ' —'}</span>
+        <span class="r2-meta-pill${meet ? ' on' : ''}">🤝 Members${meet ? '' : ' —'}</span>
       </div>
-      <div class="r2-case-sec">
-        <h5>Recommendation</h5>
-        <div class="read-aloud">Read aloud</div>
-        <div class="prompt">${esc((c.conclusion && c.conclusion.say) || '')}</div>
-        <div class="r2-case-key">
-          <div class="r2-case-when">What good looks like</div>
-          ${r2CaseListHtml((c.conclusion && c.conclusion.expected) || [])}
+      <div class="r2-meta-vouches">
+        <span class="r2-meta-lbl">${v.by.length ? 'Vouched · ' + v.by.length : 'Vouch'}</span>
+        <div class="vouch-row">
+          ${B.reviewers.map(function (r) {
+            return `<button type="button" class="vouch-chip ${v.by.indexOf(r.id) !== -1 ? 'on' : ''}" data-vouch="${r.id}" title="${esc(r.name)} — ${esc(r.role)}">${esc(r.name.split(' ')[0])}</button>`;
+          }).join('')}
         </div>
       </div>
     </div>`;
 }
 
-function r2CaseRowHtml(c, selectedId) {
-  const open = selectedId === c.id;
-  return `<div class="r2-case${open ? ' open sel' : ''}" data-case="${esc(c.id)}">
-      <div class="r2-bq-bar">
-        <button type="button" class="r2-bq-title" data-case="${esc(c.id)}">
-          <span class="r2-bq-label">${esc(r2CaseTitle(c))}</span>
-        </button>
-        ${open ? `<button type="button" class="r2-bq-clear" data-caseclear="${esc(c.id)}">Clear</button>` : ''}
-      </div>
-      ${open ? r2CaseBodyHtml(c) : ''}
-    </div>`;
+function revealR2Workspace() {
+  const split = document.querySelector('.r2-split');
+  if (!split || !contentEl || !contentEl.classList.contains('r2-case-open')) return;
+  const rect = split.getBoundingClientRect();
+  if (rect.top >= 72 && rect.bottom <= window.innerHeight - 12) return;
+  if (typeof split.scrollIntoView === 'function') {
+    split.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+function applyR2CaseSplit(g, a, opts) {
+  opts = opts || {};
+  const selectedId = r2SelectedCaseId(g);
+  const expanded = !!selectedId && isR2CaseRefOpen(a && a.id);
+  const root = document.getElementById('r2GradeRoot');
+  if (root) {
+    root.classList.toggle('r2-has-case', expanded);
+    applyR2CaseLayout(getR2CaseLayout());
+  }
+  if (contentEl) contentEl.classList.toggle('r2-case-open', expanded);
+
+  const c = selectedId ? r2CaseById(selectedId) : null;
+  const title = c ? r2CaseTitle(c) : '';
+  const headerCase = document.getElementById('r2HeaderCase');
+  if (headerCase) {
+    headerCase.textContent = title;
+    if (title) headerCase.removeAttribute('hidden');
+    else headerCase.setAttribute('hidden', '');
+  }
+  const openTitle = document.getElementById('r2OpenCaseTitle');
+  if (openTitle) {
+    openTitle.textContent = title;
+    openTitle.hidden = !title;
+  }
+  const collapseBtn = document.getElementById('r2CaseCollapseBtn');
+  if (collapseBtn) {
+    collapseBtn.hidden = !selectedId;
+    collapseBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    collapseBtn.setAttribute('aria-label', expanded ? 'Collapse case reference' : 'Expand case reference');
+    collapseBtn.title = expanded ? 'Collapse case reference' : 'Expand case reference';
+    collapseBtn.textContent = expanded ? '▾' : '▸';
+  }
+
+  const guide = document.getElementById('r2CaseGuide');
+  if (guide) {
+    const prev = guide.getAttribute('data-case') || '';
+    if (selectedId) guide.setAttribute('data-case', selectedId);
+    if (expanded) {
+      guide.hidden = false;
+      if (selectedId !== prev || !guide.firstChild) {
+        guide.innerHTML = c ? r2CaseBodyHtml(c) : '';
+        const casePane = document.getElementById('r2CasePane');
+        if (casePane && !opts.keepCaseScroll) casePane.scrollTop = 0;
+      }
+    } else {
+      guide.hidden = true;
+    }
+  }
+  if (opts.fromUser && expanded) revealR2Workspace();
 }
 
 function persistR2Case(a, caseId) {
@@ -5493,7 +5783,8 @@ function bindR2CaseRow(row, a) {
       const id = title.dataset.case;
       if (!id) return;
       persistR2Case(a, id);
-      syncR2CaseRows(document.getElementById('gradeMain'), getGrade('round2', a.id), a);
+      setR2CaseRefOpen(a.id, true);
+      syncR2CaseRows(document.getElementById('gradeMain'), getGrade('round2', a.id), a, { fromUser: true });
     });
   }
   const clear = row.querySelector('.r2-bq-clear');
@@ -5502,42 +5793,53 @@ function bindR2CaseRow(row, a) {
     clear.addEventListener('click', function (evt) {
       if (evt) { evt.preventDefault(); evt.stopPropagation(); }
       captureOpenR2Fields();
-      persistR2Case(a, '');
-      syncR2CaseRows(document.getElementById('gradeMain'), getGrade('round2', a.id), a);
+      setR2CaseRefOpen(a.id, false);
+      syncR2CaseRows(document.getElementById('gradeMain'), getGrade('round2', a.id), a, { fromUser: true });
     });
   }
 }
 
-function syncR2CaseRows(container, g, a) {
+function bindR2CaseCollapse(a) {
+  const btn = document.getElementById('r2CaseCollapseBtn');
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', function (evt) {
+    if (evt) { evt.preventDefault(); evt.stopPropagation(); }
+    captureOpenR2Fields();
+    const rec = getGrade('round2', a.id);
+    if (!r2SelectedCaseId(rec)) return;
+    setR2CaseRefOpen(a.id, !isR2CaseRefOpen(a.id));
+    syncR2CaseRows(document.getElementById('gradeMain'), rec, a, { fromUser: true });
+  });
+}
+
+function syncR2CaseRows(container, g, a, opts) {
   if (!container) return;
   const selectedId = r2SelectedCaseId(g);
+  const expanded = !!selectedId && isR2CaseRefOpen(a && a.id);
   container.querySelectorAll('.r2-case[data-case]').forEach(function (row) {
     const id = row.dataset.case;
     const c = r2CaseById(id);
     if (!c) return;
-    const shouldOpen = selectedId === id;
+    const sel = selectedId === id;
+    const shouldOpen = sel && expanded;
     const isOpen = row.classList.contains('open');
-    const focused = row.contains(document.activeElement) && isEditingField();
+    row.classList.toggle('sel', sel);
     if (shouldOpen && !isOpen) {
-      row.classList.add('open', 'sel');
-      if (!row.querySelector('.r2-case-body')) row.insertAdjacentHTML('beforeend', r2CaseBodyHtml(c));
+      row.classList.add('open');
       const bar = row.querySelector('.r2-bq-bar');
       if (bar && !bar.querySelector('.r2-bq-clear')) {
         bar.insertAdjacentHTML('beforeend', `<button type="button" class="r2-bq-clear" data-caseclear="${esc(id)}">Clear</button>`);
       }
       bindR2CaseRow(row, a);
-    } else if (!shouldOpen && isOpen && !focused) {
-      row.classList.remove('open', 'sel');
-      const body = row.querySelector('.r2-case-body');
-      if (body) body.remove();
+    } else if (!shouldOpen && isOpen) {
+      row.classList.remove('open');
       const clr = row.querySelector('.r2-bq-clear');
       if (clr) clr.remove();
-    } else {
-      row.classList.toggle('sel', shouldOpen);
-      row.classList.toggle('open', shouldOpen || (isOpen && focused));
     }
-    if (shouldOpen) bindR2CaseRow(row, a);
+    if (sel) bindR2CaseRow(row, a);
   });
+  applyR2CaseSplit(g, a, opts);
 }
 
 function r2DimCardHtml(d, g, unweighted) {
@@ -5565,57 +5867,69 @@ function renderRound2Grade(a, g) {
   const selected = r2BehavioralSelected(g);
   const qs = r2BehavioralList();
   const fit = r2FitDim() || { key: 'fit_communication', label: 'Fit & Communication', levels: [] };
+  const selectedCaseId = r2SelectedCaseId(g);
+  const selectedCase = selectedCaseId ? r2CaseById(selectedCaseId) : null;
+  const selectedTitle = selectedCase ? r2CaseTitle(selectedCase) : '';
+  const caseExpanded = !!selectedCaseId && isR2CaseRefOpen(a.id);
+  const caseLayout = getR2CaseLayout();
 
   main.innerHTML = `
-    <div class="weight-note">Case total is the six case dimensions / 24. Fit &amp; Communication is scored with comments but unweighted — it does not change the total.</div>
-    <div class="dim-card r2-behaviorals-card">
-      <div class="dim-head">
-        <h4>Behavioral questions — choose 1–2</h4>
-        <span class="n" id="r2BehavioralCount">${esc(r2SelectedCountHtml(selected))}</span>
-      </div>
-      <div class="dim-body">
-        <div class="sub r2-bq-hint">Click a title to expand it, select it, and take notes. Clicking an open question keeps it selected. Usually 1–2; more is allowed.</div>
-        <div id="r2BehavioralList" class="r2-bq-list">
-          ${qs.map(function (q) { return r2BehavioralRowHtml(q, g, selected); }).join('')}
+    <div id="r2GradeRoot" class="r2-grade${caseExpanded ? ' r2-has-case' : ''} r2-layout-${esc(caseLayout)}">
+      <div class="weight-note r2-weight-note">Case score is the average of scored case dimensions (Introduction through Recommendation) / 4. Fit &amp; Communication is unweighted. Behavioral avg is separate — typically 1–2 asked questions — and is not blended with the case score. Collapse or Clear on the case reference does not change scores.</div>
+      <div class="r2-split">
+        <div class="r2-case-pane" id="r2CasePane" data-r2-pane="case">
+          <div class="r2-case-toolbar">
+            <div class="r2-case-toolbar-head">
+              <h4>Case reference</h4>
+              <span class="r2-open-case-title" id="r2OpenCaseTitle"${selectedTitle ? '' : ' hidden'}>${esc(selectedTitle)}</span>
+              <button type="button" class="r2-case-collapse" id="r2CaseCollapseBtn"${selectedCaseId ? '' : ' hidden'} aria-expanded="${caseExpanded ? 'true' : 'false'}" aria-label="${caseExpanded ? 'Collapse case reference' : 'Expand case reference'}" title="${caseExpanded ? 'Collapse case reference' : 'Expand case reference'}">${caseExpanded ? '▾' : '▸'}</button>
+            </div>
+            <div class="r2-case-instructions">${esc(r2CaseInstructionsText())}</div>
+            <div class="field-label r2-case-pick-lbl">Case — click to open the interviewer guide</div>
+            <div class="sub r2-bq-hint r2-case-pick-hint">One case per interview. The rubric is independent — Clear only hides this guide.</div>
+            <div id="r2CaseList" class="r2-bq-list r2-case-chips">
+              ${r2CaseList().map(function (c) { return r2CaseRowHtml(c, selectedCaseId, caseExpanded); }).join('')}
+            </div>
+          </div>
+          <div id="r2CaseGuide" class="r2-case-guide" data-case="${esc(selectedCaseId || '')}"${caseExpanded ? '' : ' hidden'}>
+            ${caseExpanded && selectedCase ? r2CaseBodyHtml(selectedCase) : ''}
+          </div>
+        </div>
+        <div class="r2-rubric-pane" id="r2RubricPane" data-r2-pane="rubric">
+          ${r2CaseNotesHtml(g)}
+          ${R.dims.map(function (d) { return r2DimCardHtml(d, g, false); }).join('')}
+          ${r2DimCardHtml(fit, g, true)}
+          <div class="card card-pad">
+            <div class="field-label">Recommendation</div>
+            <div class="recommend-row">
+              ${['Strong yes', 'Yes', 'Borderline', 'No'].map(r => `<span class="chip ${g.recommendation === r ? 'active' : ''}" data-rec="${r}">${r}</span>`).join('')}
+            </div>
+            <label class="flag-row"><input type="checkbox" id="flagSecond2" ${g.flagSecond ? 'checked' : ''}> Flag for second reviewer</label>
+            <div class="field-label">Interviewer notes</div>
+            <div class="notes-field"><textarea data-notekey="__main" placeholder="Anything else worth flagging…">${esc(g.notes || '')}</textarea></div>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="dim-card r2-case-card">
-      <div class="dim-head"><h4>Case review</h4>${r2ScorePill(g.caseScore)}</div>
-      <div class="dim-body">
-        <div class="r2-case-instructions">${esc(r2CaseInstructionsText())}</div>
-        <div class="field-label" style="margin-top:12px;">Case — click to expand and select</div>
-        <div class="sub r2-bq-hint">One case per interview. Prompt first, then exhibits, then what good looks like.</div>
-        <div id="r2CaseList" class="r2-bq-list">
-          ${r2CaseList().map(function (c) { return r2CaseRowHtml(c, r2SelectedCaseId(g)); }).join('')}
+      <div class="dim-card r2-behaviorals-card">
+        <div class="dim-head">
+          <h4>Behavioral questions — choose 1–2</h4>
+          <span class="n" id="r2BehavioralCount">${esc(r2SelectedCountHtml(selected))}</span>
         </div>
-        <div class="field-label" style="margin-top:12px;">Overall case score</div>
-        <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
-          ${['1', '2', '3', '4'].map(function (k) {
-            const n = Number(k);
-            const crit = R2_BEHAVIORAL_BANDS[n] || {};
-            return `<div class="band-opt ${g.caseScore === n ? 'sel' : ''}" data-key="caseScore" data-val="${k}"><span class="sc">${k}</span>${esc(crit.label || '')}</div>`;
-          }).join('')}
+        <div class="dim-body">
+          <div class="sub r2-bq-hint">Click a title to expand it, select it, and take notes. Usually 1–2; more is allowed. Scores here are not part of the case average.</div>
+          <div id="r2BehavioralList" class="r2-bq-list">
+            ${qs.map(function (q) { return r2BehavioralRowHtml(q, g, selected); }).join('')}
+          </div>
         </div>
-        <div class="field-label">Case notes</div>
-        <div class="notes-field"><textarea id="r2CaseNotes" data-notekey="__case" placeholder="Walkthrough notes, standout moments, gaps…">${esc(g.caseNotes || '')}</textarea></div>
       </div>
-    </div>
-    ${R.dims.map(function (d) { return r2DimCardHtml(d, g, false); }).join('')}
-    ${r2DimCardHtml(fit, g, true)}
-    <div class="card card-pad">
-      <div class="field-label">Recommendation</div>
-      <div class="recommend-row">
-        ${['Strong yes', 'Yes', 'Borderline', 'No'].map(r => `<span class="chip ${g.recommendation === r ? 'active' : ''}" data-rec="${r}">${r}</span>`).join('')}
-      </div>
-      <label class="flag-row"><input type="checkbox" id="flagSecond2" ${g.flagSecond ? 'checked' : ''}> Flag for second reviewer</label>
-      <div class="field-label">Interviewer notes</div>
-      <div class="notes-field"><textarea data-notekey="__main" placeholder="Anything else worth flagging…">${esc(g.notes || '')}</textarea></div>
+      ${r2ProfileFooterHtml(a)}
     </div>
   `;
+  if (contentEl) contentEl.classList.toggle('r2-case-open', caseExpanded);
   bindR2BandOpts(main, a);
   main.querySelectorAll('.r2-bq').forEach(function (row) { bindR2BehavioralRow(row, a); });
   main.querySelectorAll('.r2-case').forEach(function (row) { bindR2CaseRow(row, a); });
+  bindR2CaseCollapse(a);
   main.querySelectorAll('[data-rec]').forEach(el => el.addEventListener('click', () => {
     captureOpenR2Fields();
     const rec = getGrade('round2', a.id);
@@ -5632,6 +5946,7 @@ function renderRound2Grade(a, g) {
     saveGrade('round2', a.id, 'flagSecond', null, rec.flagSecond);
   });
   bindNotesFields(main, 'round2', a.id);
+  bindVouchCard(a);
 }
 
 function essayField(label, text, always) {
@@ -5927,16 +6242,17 @@ function buildCsv(round) {
       return [a.name, a.email, interviewerName(g.interviewer) || '', g.interviewTime || '', g.initialNotes || '', g.thankYou ? 'Yes' : 'No', g.knowFlag ? 'Yes' : '', g.scores.fit0 ?? '', g.scores.fit1 ?? '', g.scores.fit2 ?? '', g.scores.personal1 ?? '', g.scores.personal2 ?? '', g.scores.personality ?? '', r1raw ?? '', r1std == null ? '' : +r1std.toFixed(3), r1blend == null ? '' : +r1blend.toFixed(3), raw ?? '', std == null ? '' : +std.toFixed(3), g.recommendation || '', g.notes || ''];
     });
   } else {
-    header = ['Candidate (First & Last) Name', 'Pair', 'Room', 'Interview time', 'Case Assigned', 'Introduction', 'Framework', 'Market Sizing', 'Quant Reasoning', 'Brainstorming', 'Recommendation Dim', 'Fit & Communication', 'Final Grade / 24', 'Behaviorals asked', 'Case overall', 'Recommendation', 'Interviewer Notes'];
+    header = ['Candidate (First & Last) Name', 'Pair', 'Room', 'Interview time', 'Case Assigned', 'Introduction', 'Framework', 'Market Sizing', 'Quant Reasoning', 'Brainstorming', 'Recommendation Dim', 'Fit & Communication', 'Case avg /4', 'Behavioral avg /4', 'Behaviorals asked', 'Legacy overall case', 'Recommendation', 'Interviewer Notes'];
     rows = poolForRound('round2').map(a => {
       const g = STATE.grades.round2[a.id] || { scores: {} };
       const caseObj = r2CaseById(g.caseId);
       const r = round2Total(g);
+      const beh = round2BehavioralAvg(g);
       const asked = r2BehavioralSelected(g).map(function (id) {
         const q = r2BehavioralById(id);
         return (q ? q.title : id) + (typeof g.scores[id] === 'number' ? ' ' + g.scores[id] : '');
       }).join(' | ');
-      return [a.name, r2PairLabel(r2Interviewers(a.id)), r2InterviewRoom(a.id), r2InterviewTime(a.id), caseObj ? r2CaseTitle(caseObj) : '', g.scores.introduction ?? '', g.scores.framework ?? '', g.scores.market_sizing ?? '', g.scores.quant_reasoning ?? '', g.scores.brainstorming ?? '', g.scores.recommendation ?? '', g.scores.fit_communication ?? '', r ? r.total : '', asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
+      return [a.name, r2PairLabel(r2Interviewers(a.id)), r2InterviewRoom(a.id), r2InterviewTime(a.id), caseObj ? r2CaseTitle(caseObj) : '', g.scores.introduction ?? '', g.scores.framework ?? '', g.scores.market_sizing ?? '', g.scores.quant_reasoning ?? '', g.scores.brainstorming ?? '', g.scores.recommendation ?? '', g.scores.fit_communication ?? '', r ? +r.total.toFixed(3) : '', beh == null ? '' : +beh.toFixed(3), asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
     });
   }
   const csv = [header, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
@@ -5970,7 +6286,7 @@ function ensureGateDom() {
   el.setAttribute('aria-modal', 'true');
   el.setAttribute('aria-labelledby', 'gateTitle');
   el.innerHTML = '<form id="gateForm" class="gate-card" autocomplete="off">'
-    + '<h1 id="gateTitle">REM UF Recruitment</h1>'
+    + '<h1 id="gateTitle">Rem UF Recruitment</h1>'
     + '<p>Enter the recruitment password to open the dashboard.</p>'
     + '<label class="sr-only" for="gatePassword">Password</label>'
     + '<input type="password" id="gatePassword" name="password" autocomplete="current-password">'
