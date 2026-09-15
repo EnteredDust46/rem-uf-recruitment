@@ -521,6 +521,7 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 }
 .r2-case-note { font-size: 13px; color: var(--ink-soft); line-height: 1.45; margin: 6px 0 0; }
 .r2-header-case { margin-left: 10px; vertical-align: middle; font-size: 12px; font-weight: 650; }
+.content.r2-grade-page.r2-case-open { padding-top: 16px; padding-bottom: 28px; }
 .content.r2-case-open .applicant-header { margin-bottom: 10px; }
 .content.r2-case-open .r1-app-score { display: none; }
 .content.r2-case-open .assign-block .assign-label { margin-top: 4px; }
@@ -613,7 +614,7 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
   box-shadow: var(--shadow-card);
   overflow-y: auto;
   overscroll-behavior: contain;
-  max-height: min(72vh, calc(100vh - 140px));
+  max-height: min(78vh, calc(100vh - 8rem));
 }
 .r2-has-case .r2-rubric-pane { padding: 12px; }
 .r2-has-case .r2-case-pane { padding: 0 0 12px; }
@@ -624,13 +625,18 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
     align-items: stretch;
   }
   .r2-has-case.r2-layout-stacked .r2-split { grid-template-columns: 1fr; }
-  .r2-has-case .r2-case-pane,
-  .r2-has-case .r2-rubric-pane {
-    max-height: calc(100vh - 168px);
+  .r2-has-case.r2-layout-side .r2-case-pane,
+  .r2-has-case.r2-layout-side .r2-rubric-pane {
+    /* Topbar is ~4.5rem; 7rem leaves a tight gap under the sticky bar. */
+    max-height: calc(100vh - 7rem);
+  }
+  body.nav-collapsed .r2-has-case.r2-layout-side .r2-case-pane,
+  body.nav-collapsed .r2-has-case.r2-layout-side .r2-rubric-pane {
+    max-height: calc(100vh - 6.25rem);
   }
   .r2-has-case.r2-layout-stacked .r2-case-pane,
   .r2-has-case.r2-layout-stacked .r2-rubric-pane {
-    max-height: min(56vh, calc(100vh - 180px));
+    max-height: min(62vh, calc(100vh - 10rem));
   }
 }
 @media (max-width: 699px) {
@@ -640,7 +646,7 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
   .r2-has-case .r2-split { grid-template-columns: 1fr; }
   .r2-has-case .r2-case-pane,
   .r2-has-case .r2-rubric-pane {
-    max-height: min(70vh, calc(100vh - 140px));
+    max-height: min(72vh, calc(100vh - 8rem));
   }
 }
 .r2-profile-footer {
@@ -873,7 +879,7 @@ window.BOOTSTRAP = {"meta": {"builtAt": "2026-09-05", "applicantCount": 248, "co
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-layout-rem-20260914';
+const BUILD_STAMP = 'rd2-split-taller-20260914';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };

@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-layout-rem-20260914';
+const BUILD_STAMP = 'rd2-split-taller-20260914';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
