@@ -118,12 +118,18 @@ def round1_average(g):
 
 
 def round2_total(g):
-    dim_keys = ['introduction', 'framework', 'market_sizing', 'quant_reasoning', 'brainstorming', 'recommendation']
+    dim_keys = ['framework', 'quant_reasoning', 'brainstorming', 'recommendation', 'fit_communication']
     scores = (g or {}).get('scores') or {}
-    vals = [scores[k] for k in dim_keys if isinstance(scores.get(k), (int, float))]
+    vals = []
+    for k in dim_keys:
+        v = scores.get(k)
+        if k == 'quant_reasoning' and not isinstance(v, (int, float)):
+            v = scores.get('math')
+        if isinstance(v, (int, float)):
+            vals.append(v)
     if not vals:
         return None
-    return {'total': sum(vals), 'max': 24, 'count': len(vals)}
+    return {'total': sum(vals) / len(vals), 'max': 4, 'count': len(vals)}
 
 
 class Scoring:

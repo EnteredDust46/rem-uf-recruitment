@@ -879,7 +879,7 @@ window.BOOTSTRAP = {"meta": {"builtAt": "2026-09-05", "applicantCount": 248, "co
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-split-taller-20260914';
+const BUILD_STAMP = 'rd2-rubric-five-20260914';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -2665,22 +2665,77 @@ function round1Average(g) {
   return vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
 }
 
+const R2_CASE_DIM_SPEC = [
+  { key: 'framework', label: 'Framework' },
+  { key: 'quant_reasoning', label: 'Math' },
+  { key: 'brainstorming', label: 'Brainstorm' },
+  { key: 'recommendation', label: 'Recommendation' },
+  { key: 'fit_communication', label: 'Fit and communication/vibe check' },
+];
+const R2_CASE_DIM_FALLBACKS = {
+  framework: [
+    'Takes 1-2 minutes to produce a relevant, fleshed out, and MECE-adherent framework',
+    'Produces a relevant framework while taking too long or missing some MECE/relevancy elements',
+    'Attempts to create a relevant framework but misses key elements of the exercise',
+    'Does not demonstrate a basic understanding of framework creation',
+  ],
+  quant_reasoning: [
+    'Clearly structures, navigates, and communicates through quantitative operations with minimal mistakes',
+    'Follows a logical path towards solutions with a few mistakes, may get lost and need guidance once or twice',
+    'Demonstrates basic quant abilities, but noticeably lacks in structuring and/or needs major guidance throughout',
+    'Cannot progress through one or more sections of quantitative analysis and must be given the answers to proceed',
+  ],
+  brainstorming: [
+    'Presents multiple creative, real-world driven ideas that accurately encompass all case aspects',
+    'Presents 1 well thought out idea or multiple shallower ideas that add depth and structure to the case',
+    'Relates ideas to case information, but makes no effort to structure thoughts beyond stream of consciousness',
+    'Does not provide any material insight beyond the given information in the prompt',
+  ],
+  recommendation: [
+    'Presents an efficient, holistic recommendation that demonstrates a deep understanding of all case elements',
+    'Presents a relatively structured recommendation which responds to the prompt’s main questions',
+    'Attempts to provide a structured recommendation, but missed many aspects of the case',
+    'Does not provide a succinct recommendation or does not incorporate the prompt information',
+  ],
+  fit_communication: [
+    'Clear, confident, client-ready presence; strong rapport and composure throughout',
+    'Generally clear and composed, with only brief hesitation or stiffness',
+    'Gets the point across but presence, polish, or composure slips at times',
+    'Hard to follow, withdrawn, or loses composure — rapport does not land',
+  ],
+};
+
+function r2BootstrapDimByKey(key) {
+  const R = B.rubrics && B.rubrics.round2;
+  if (!R) return null;
+  const dims = R.dims || [];
+  for (let i = 0; i < dims.length; i++) {
+    if (dims[i] && dims[i].key === key) return dims[i];
+  }
+  if (R.fitDim && (R.fitDim.key === key || key === 'fit_communication')) return R.fitDim;
+  return null;
+}
+
+function r2CaseDims() {
+  return R2_CASE_DIM_SPEC.map(function (spec) {
+    const src = r2BootstrapDimByKey(spec.key);
+    const levels = (src && Array.isArray(src.levels) && src.levels.length)
+      ? src.levels
+      : (R2_CASE_DIM_FALLBACKS[spec.key] || ['', '', '', '']);
+    return { key: spec.key, label: spec.label, levels: levels };
+  });
+}
+
 function r2WeightedDimKeys() {
-  const dims = (B.rubrics.round2 && B.rubrics.round2.dims) || [];
-  const fitKey = r2FitDimKey();
-  return dims.filter(function (d) {
-    return d && d.key && !d.unweighted && d.key !== fitKey;
-  }).map(function (d) { return d.key; });
+  return r2CaseDims().map(function (d) { return d.key; });
 }
 
 function r2FitDim() {
   const fit = (B.rubrics.round2 && B.rubrics.round2.fitDim) || null;
-  if (!fit) return null;
-  fit.unweighted = true;
+  if (!fit) return { key: 'fit_communication', label: 'Fit and communication/vibe check', levels: R2_CASE_DIM_FALLBACKS.fit_communication };
+  delete fit.unweighted;
   delete fit.draft;
-  if (fit.label) {
-    fit.label = String(fit.label).replace(/\s*\(draft[^)]*\)/i, '').trim() || 'Fit & Communication';
-  }
+  fit.label = 'Fit and communication/vibe check';
   return fit;
 }
 
@@ -2689,24 +2744,43 @@ function r2FitDimKey() {
   return (fit && fit.key) || 'fit_communication';
 }
 
+function isR2MathKey(key) {
+  return key === 'quant_reasoning' || key === 'math';
+}
+
 function isR2DimNoteKey(key) {
   if (!key) return false;
-  if (key === r2FitDimKey()) return true;
+  if (isR2MathKey(key) || key === r2FitDimKey()) return true;
+  if (r2CaseDims().some(function (d) { return d && d.key === key; })) return true;
   const dims = (B.rubrics.round2 && B.rubrics.round2.dims) || [];
   return dims.some(function (d) { return d && d.key === key; });
+}
+
+function r2DimScore(g, key) {
+  const scores = (g && g.scores) || {};
+  if (isR2MathKey(key)) {
+    if (typeof scores.quant_reasoning === 'number') return scores.quant_reasoning;
+    if (typeof scores.math === 'number') return scores.math;
+    return undefined;
+  }
+  const v = scores[key];
+  return typeof v === 'number' ? v : undefined;
 }
 
 function r2DimNote(g, key) {
   if (!g || !key) return '';
   if (g.dimNotes && noteText(g.dimNotes[key]).trim()) return g.dimNotes[key];
-  if (g.qnotes && typeof g.qnotes[key] === 'string') return g.qnotes[key];
+  if (isR2MathKey(key) && g.dimNotes && noteText(g.dimNotes.math).trim()) return g.dimNotes.math;
+  if (isR2MathKey(key) && g.dimNotes && noteText(g.dimNotes.quant_reasoning).trim()) return g.dimNotes.quant_reasoning;
+  if (g.qnotes && typeof g.qnotes[key] === 'string' && g.qnotes[key].trim()) return g.qnotes[key];
+  if (isR2MathKey(key) && g.qnotes && typeof g.qnotes.math === 'string') return g.qnotes.math;
+  if (isR2MathKey(key) && g.qnotes && typeof g.qnotes.quant_reasoning === 'string') return g.qnotes.quant_reasoning;
   return '';
 }
 
 function round2Total(g) {
   const dims = r2WeightedDimKeys();
-  const scores = (g && g.scores) || {};
-  const vals = dims.map(function (k) { return scores[k]; }).filter(function (v) { return typeof v === 'number'; });
+  const vals = dims.map(function (k) { return r2DimScore(g, k); }).filter(function (v) { return typeof v === 'number'; });
   if (!vals.length) return null;
   const sum = vals.reduce(function (a, b) { return a + b; }, 0);
   return { total: sum / vals.length, max: 4, count: vals.length, sum: sum };
@@ -5107,9 +5181,7 @@ function applyLiveR2GradeUpdate() {
   const g = getGrade('round2', a.id);
   syncR2BehavioralRows(main, g, a);
   syncR2CaseRows(main, g, a, { keepCaseScroll: true });
-  const R = B.rubrics.round2;
-  (R.dims || []).forEach(function (d) { updateR2ScoreUI(main, g, d.key); });
-  if (R.fitDim) updateR2ScoreUI(main, g, R.fitDim.key);
+  r2CaseDims().forEach(function (d) { updateR2ScoreUI(main, g, d.key); });
   updateR2ScoreUI(main, g, 'caseScore');
   main.querySelectorAll('textarea[data-notekey]').forEach(function (ta) {
     if (document.activeElement === ta) return;
@@ -5520,7 +5592,7 @@ function renderRoundList(round) {
           <th data-sort="time" class="${STATE.sortKey === 'time' ? 'sorted' : ''}">Time</th>
           <th data-sort="room" class="${STATE.sortKey === 'room' ? 'sorted' : ''}">Room</th>
           <th data-sort="r1score" class="${STATE.sortKey === 'r1score' || STATE.sortKey === 'gpa' ? 'sorted' : ''}" title="First Round average and interviewer-standardized score">R1 avg</th>
-          <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}" title="Average of scored case dimensions / 4">Case /4</th>
+          <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}" title="Equal-weight average of scored case categories / 4">Case /4</th>
           <th data-sort="beh" class="${STATE.sortKey === 'beh' ? 'sorted' : ''}" title="Average of selected scored behaviorals / 4">Beh /4</th>`
       : `<th data-sort="name" class="${STATE.sortKey === 'name' ? 'sorted' : ''}">Applicant</th>
           <th data-sort="gpa" class="${STATE.sortKey === 'gpa' ? 'sorted' : ''}">GPA</th>
@@ -5697,7 +5769,7 @@ function renderRow(round, a) {
       <td>${time ? esc(time) : '<span class="sub">—</span>'}</td>
       <td>${room ? esc(room) : '<span class="sub">—</span>'}</td>
       <td><span class="score-pill pair">${formatRound1ScorePairHtml(a.id)}</span></td>
-      <td><span class="score-pill ${caseClass}" title="Mean of scored case dimensions">${formatR2Avg(caseT && caseT.total)}</span></td>
+      <td><span class="score-pill ${caseClass}" title="Mean of scored case categories / 4">${formatR2Avg(caseT && caseT.total)}</span></td>
       <td><span class="score-pill ${behClass}" title="Mean of selected scored behaviorals">${formatR2Avg(beh)}</span></td>
     </tr>`;
   }
@@ -6332,15 +6404,18 @@ function persistR2BehavioralSelected(a, selected) {
 function updateR2ScoreUI(container, g, key) {
   if (!container) return;
   const isCaseOverall = key === 'caseScore';
-  container.querySelectorAll('.band-opt[data-key="' + key + '"]').forEach(function (opt) {
-    const cur = isCaseOverall ? g.caseScore : g.scores[key];
+  const cur = isCaseOverall ? g.caseScore : r2DimScore(g, key);
+  const selector = isR2MathKey(key)
+    ? '.band-opt[data-key="quant_reasoning"], .band-opt[data-key="math"]'
+    : '.band-opt[data-key="' + key + '"]';
+  container.querySelectorAll(selector).forEach(function (opt) {
     opt.classList.toggle('sel', cur === Number(opt.dataset.val));
   });
-  const sample = container.querySelector('.band-opt[data-key="' + key + '"]');
+  const sample = container.querySelector(selector);
   const card = sample && sample.closest('.dim-card, .r2-bq');
   const pill = card && card.querySelector('.score-pill');
   if (pill) {
-    const v = isCaseOverall ? g.caseScore : g.scores[key];
+    const v = isCaseOverall ? g.caseScore : cur;
     pill.textContent = v || '—';
     pill.classList.toggle('none', !v);
   }
@@ -6362,10 +6437,20 @@ function bindR2BandOpts(root, a) {
         updateHeaderScore('round2', rec);
         return;
       }
-      rec.scores[key] = rec.scores[key] === val ? undefined : val;
+      const cur = r2DimScore(rec, key);
+      rec.scores[key] = cur === val ? undefined : val;
+      if (isR2MathKey(key)) {
+        rec.scores.quant_reasoning = rec.scores[key];
+        rec.scores.math = rec.scores[key];
+      }
       if (rec.qnotes) saveGrade('round2', a.id, 'qnotes', null, cloneJson(rec.qnotes));
       if (rec.dimNotes) saveGrade('round2', a.id, 'dimNotes', null, cloneJson(rec.dimNotes));
       saveGrade('round2', a.id, 'score', key, rec.scores[key]);
+      if (isR2MathKey(key)) {
+        const mathVal = rec.scores.quant_reasoning;
+        if (key !== 'quant_reasoning') saveGrade('round2', a.id, 'score', 'quant_reasoning', mathVal);
+        if (key !== 'math') saveGrade('round2', a.id, 'score', 'math', mathVal);
+      }
       updateR2ScoreUI(main, rec, key);
       updateHeaderScore('round2', rec);
     });
@@ -6718,15 +6803,16 @@ function syncR2CaseRows(container, g, a, opts) {
   applyR2CaseSplit(g, a, opts);
 }
 
-function r2DimCardHtml(d, g, unweighted) {
+function r2DimCardHtml(d, g) {
   const R = B.rubrics.round2;
   const note = r2DimNote(g, d.key);
+  const score = r2DimScore(g, d.key);
   return `
       <div class="dim-card">
-        <div class="dim-head"><h4>${esc(d.label)}</h4>${unweighted ? '<span class="chip unweighted">Unweighted</span>' : ''}${r2ScorePill(g.scores[d.key])}</div>
+        <div class="dim-head"><h4>${esc(d.label)}</h4>${r2ScorePill(score)}</div>
         <div class="dim-body">
           <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
-            ${d.levels.map((txt, i) => { const val = 4 - i; return `<div class="band-opt ${g.scores[d.key] === val ? 'sel' : ''}" data-key="${d.key}" data-val="${val}"><span class="sc">${R.levelLabels[i]}</span>${esc(txt)}</div>`; }).join('')}
+            ${d.levels.map((txt, i) => { const val = 4 - i; return `<div class="band-opt ${score === val ? 'sel' : ''}" data-key="${d.key}" data-val="${val}"><span class="sc">${R.levelLabels[i]}</span>${esc(txt)}</div>`; }).join('')}
           </div>
           <div class="field-label">Comments</div>
           <div class="notes-field"><textarea data-notekey="${esc(d.key)}" placeholder="Notes on ${esc(d.label)}…">${esc(note)}</textarea></div>
@@ -6736,13 +6822,12 @@ function r2DimCardHtml(d, g, unweighted) {
 
 function renderRound2Grade(a, g) {
   const main = document.getElementById('gradeMain');
-  const R = B.rubrics.round2;
   captureOpenR2Fields();
   g = getGrade('round2', a.id);
   if (!Array.isArray(g.behavioralSelected)) g.behavioralSelected = r2BehavioralSelected(g);
   const selected = r2BehavioralSelected(g);
   const qs = r2BehavioralList();
-  const fit = r2FitDim() || { key: 'fit_communication', label: 'Fit & Communication', levels: [] };
+  const caseDims = r2CaseDims();
   const selectedCaseId = r2SelectedCaseId(g);
   const selectedCase = selectedCaseId ? r2CaseById(selectedCaseId) : null;
   const selectedTitle = selectedCase ? r2CaseTitle(selectedCase) : '';
@@ -6751,7 +6836,7 @@ function renderRound2Grade(a, g) {
 
   main.innerHTML = `
     <div id="r2GradeRoot" class="r2-grade${caseExpanded ? ' r2-has-case' : ''} r2-layout-${esc(caseLayout)}">
-      <div class="weight-note r2-weight-note">Case score is the average of scored case dimensions (Introduction through Recommendation) / 4. Fit &amp; Communication is unweighted. Behavioral avg is separate — typically 1–2 asked questions — and is not blended with the case score. Collapse or Clear on the case reference does not change scores.</div>
+      <div class="weight-note r2-weight-note">Case score is the equal-weight average of scored categories among Framework, Math, Brainstorm, Recommendation, and Fit and communication/vibe check (/ 4). Behavioral avg is separate — typically 1–2 asked questions — and is not blended with the case score. Collapse or Clear on the case reference does not change scores.</div>
       <div class="r2-split">
         <div class="r2-case-pane" id="r2CasePane" data-r2-pane="case">
           <div class="r2-case-toolbar">
@@ -6773,8 +6858,7 @@ function renderRound2Grade(a, g) {
         </div>
         <div class="r2-rubric-pane" id="r2RubricPane" data-r2-pane="rubric">
           ${r2CaseNotesHtml(g)}
-          ${R.dims.map(function (d) { return r2DimCardHtml(d, g, false); }).join('')}
-          ${r2DimCardHtml(fit, g, true)}
+          ${caseDims.map(function (d) { return r2DimCardHtml(d, g); }).join('')}
           <div class="card card-pad">
             <div class="field-label">Recommendation</div>
             <div class="recommend-row">
@@ -7118,7 +7202,7 @@ function buildCsv(round) {
       return [a.name, a.email, interviewerName(g.interviewer) || '', g.interviewTime || '', g.initialNotes || '', g.thankYou ? 'Yes' : 'No', g.knowFlag ? 'Yes' : '', g.scores.fit0 ?? '', g.scores.fit1 ?? '', g.scores.fit2 ?? '', g.scores.personal1 ?? '', g.scores.personal2 ?? '', g.scores.personality ?? '', r1raw ?? '', r1std == null ? '' : +r1std.toFixed(3), r1blend == null ? '' : +r1blend.toFixed(3), raw ?? '', std == null ? '' : +std.toFixed(3), g.recommendation || '', g.notes || ''];
     });
   } else {
-    header = ['Candidate (First & Last) Name', 'Pair', 'Room', 'Interview time', 'Case Assigned', 'Introduction', 'Framework', 'Market Sizing', 'Quant Reasoning', 'Brainstorming', 'Recommendation Dim', 'Fit & Communication', 'Case avg /4', 'Behavioral avg /4', 'Behaviorals asked', 'Legacy overall case', 'Recommendation', 'Interviewer Notes'];
+    header = ['Candidate (First & Last) Name', 'Pair', 'Room', 'Interview time', 'Case Assigned', 'Framework', 'Math', 'Brainstorm', 'Recommendation Dim', 'Fit and communication/vibe check', 'Introduction', 'Market Sizing', 'Case avg /4', 'Behavioral avg /4', 'Behaviorals asked', 'Legacy overall case', 'Recommendation', 'Interviewer Notes'];
     rows = poolForRound('round2').map(a => {
       const g = STATE.grades.round2[a.id] || { scores: {} };
       const caseObj = r2CaseById(g.caseId);
@@ -7128,7 +7212,7 @@ function buildCsv(round) {
         const q = r2BehavioralById(id);
         return (q ? q.title : id) + (typeof g.scores[id] === 'number' ? ' ' + g.scores[id] : '');
       }).join(' | ');
-      return [a.name, r2PairLabel(r2Interviewers(a.id)), r2InterviewRoom(a.id), r2InterviewTime(a.id), caseObj ? r2CaseTitle(caseObj) : '', g.scores.introduction ?? '', g.scores.framework ?? '', g.scores.market_sizing ?? '', g.scores.quant_reasoning ?? '', g.scores.brainstorming ?? '', g.scores.recommendation ?? '', g.scores.fit_communication ?? '', r ? +r.total.toFixed(3) : '', beh == null ? '' : +beh.toFixed(3), asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
+      return [a.name, r2PairLabel(r2Interviewers(a.id)), r2InterviewRoom(a.id), r2InterviewTime(a.id), caseObj ? r2CaseTitle(caseObj) : '', r2DimScore(g, 'framework') ?? '', r2DimScore(g, 'quant_reasoning') ?? '', r2DimScore(g, 'brainstorming') ?? '', r2DimScore(g, 'recommendation') ?? '', r2DimScore(g, 'fit_communication') ?? '', g.scores.introduction ?? '', g.scores.market_sizing ?? '', r ? +r.total.toFixed(3) : '', beh == null ? '' : +beh.toFixed(3), asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
     });
   }
   const csv = [header, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
