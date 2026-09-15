@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-lean-titles-20260914';
+const BUILD_STAMP = 'rd2-pairs-dimnotes-20260914';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -35,6 +35,11 @@ const STATE = {
   flaggedOnly: false,
   knowFlagOnly: false,
   filterAdvanceRd2: 'all',
+  filterR2Pair: 'all',
+  filterR2Room: 'all',
+  filterR2Date: 'all',
+  filterR2Interviewer: 'all',
+  r2SortTouched: false,
   returnView: null,
   queueTrail: [],
   queueDone: false,
@@ -717,9 +722,8 @@ function keepLocalR2Behaviorals(prevR2) {
     else if (localSel && localSel.length && !Array.isArray(incoming.behavioralSelected)) {
       incoming.behavioralSelected = localSel;
     }
-    if (old && old.qnotes && typeof old.qnotes === 'object') {
-      incoming.qnotes = Object.assign({}, old.qnotes, incoming.qnotes);
-    }
+    incoming.qnotes = mergeNotesPreferLocal(old && old.qnotes, incoming.qnotes);
+    incoming.dimNotes = mergeNotesPreferLocal(old && old.dimNotes, incoming.dimNotes);
     if (old && old.caseNotes && (incoming.caseNotes == null || incoming.caseNotes === '')) {
       incoming.caseNotes = old.caseNotes;
     }
@@ -730,9 +734,30 @@ function keepLocalR2Behaviorals(prevR2) {
     } else if (old && old.caseId && !incoming.caseId) {
       incoming.caseId = old.caseId;
     }
+    if (old && Array.isArray(old.interviewers) && (!Array.isArray(incoming.interviewers) || !incoming.interviewers.length)) {
+      incoming.interviewers = old.interviewers.slice();
+    }
+    if (old && old.interviewRoom && !incoming.interviewRoom) incoming.interviewRoom = old.interviewRoom;
+    if (old && old.interviewTime && !incoming.interviewTime) incoming.interviewTime = old.interviewTime;
     if (!incoming.scores || typeof incoming.scores !== 'object') incoming.scores = {};
     if (old && old.scores) incoming.scores = Object.assign({}, old.scores, incoming.scores);
   });
+}
+
+function noteText(v) {
+  return typeof v === 'string' ? v : (v == null ? '' : String(v));
+}
+
+function mergeNotesPreferLocal(oldNotes, incomingNotes) {
+  const incoming = (incomingNotes && typeof incomingNotes === 'object' && !Array.isArray(incomingNotes)) ? incomingNotes : {};
+  const old = (oldNotes && typeof oldNotes === 'object' && !Array.isArray(oldNotes)) ? oldNotes : {};
+  const out = Object.assign({}, incoming);
+  Object.keys(old).forEach(function (k) {
+    const local = noteText(old[k]);
+    const remote = noteText(out[k]);
+    if (local && !String(remote).trim()) out[k] = old[k];
+  });
+  return Object.keys(out).length ? out : (Object.keys(old).length ? Object.assign({}, old) : incomingNotes);
 }
 
 function adoptState(data) {
@@ -867,6 +892,10 @@ function applyPendingOps() {
         if (op.field === 'score') rec.scores[op.key] = op.value === null ? undefined : op.value;
         else if (op.field === 'qnotes' && op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
           rec.qnotes = Object.assign({}, rec.qnotes, op.value);
+        } else if (op.field === 'dimNotes' && op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
+          rec.dimNotes = Object.assign({}, rec.dimNotes, op.value);
+        } else if (op.field === 'interviewers') {
+          rec.interviewers = Array.isArray(op.value) ? op.value.slice() : [];
         } else if (op.field === 'personalityIdx') {
           if (hasPersonalityIdxValue(op.value)) rec.personalityIdx = Number(op.value);
           else if (hasPersonalityIdxValue(rec.personalityIdx)) {
@@ -1152,6 +1181,13 @@ function captureOpenR1Fields() {
 function captureOpenR2Fields() {
   if (STATE.gradeRound !== 'round2' || !STATE.currentApplicantId) return;
   const g = getGrade('round2', STATE.currentApplicantId);
+  const time = document.getElementById('r2InterviewTime');
+  const room = document.getElementById('r2InterviewRoom');
+  const i0 = document.getElementById('r2Interviewer0');
+  const i1 = document.getElementById('r2Interviewer1');
+  if (time) g.interviewTime = time.value || undefined;
+  if (room) g.interviewRoom = room.value || undefined;
+  if (i0 || i1) g.interviewers = normalizeR2Interviewers([i0 && i0.value, i1 && i1.value]);
   const main = document.getElementById('gradeMain');
   if (!main) return;
   main.querySelectorAll('textarea[data-notekey]').forEach(function (ta) {
@@ -1160,6 +1196,10 @@ function captureOpenR2Fields() {
     else {
       g.qnotes = g.qnotes || {};
       g.qnotes[ta.dataset.notekey] = ta.value;
+      if (isR2DimNoteKey(ta.dataset.notekey)) {
+        g.dimNotes = g.dimNotes || {};
+        g.dimNotes[ta.dataset.notekey] = ta.value;
+      }
     }
   });
   const caseNotes = document.getElementById('r2CaseNotes');
@@ -1679,9 +1719,12 @@ function hasR1Meta(rec) {
 function hasR2Meta(rec) {
   if (!rec) return false;
   if (Array.isArray(rec.behavioralSelected) && rec.behavioralSelected.length) return true;
+  if (Array.isArray(rec.interviewers) && rec.interviewers.length) return true;
+  if (rec.interviewRoom || rec.interviewTime) return true;
   if (rec.caseNotes) return true;
   if (rec.caseScore != null && rec.caseScore !== '') return true;
   if (rec.qnotes && typeof rec.qnotes === 'object' && Object.keys(rec.qnotes).length) return true;
+  if (rec.dimNotes && typeof rec.dimNotes === 'object' && Object.keys(rec.dimNotes).length) return true;
   return false;
 }
 
@@ -1720,15 +1763,50 @@ function round1Average(g) {
   return vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
 }
 
+function r2WeightedDimKeys() {
+  const dims = (B.rubrics.round2 && B.rubrics.round2.dims) || [];
+  const fitKey = r2FitDimKey();
+  return dims.filter(function (d) {
+    return d && d.key && !d.unweighted && d.key !== fitKey;
+  }).map(function (d) { return d.key; });
+}
+
+function r2FitDim() {
+  const fit = (B.rubrics.round2 && B.rubrics.round2.fitDim) || null;
+  if (!fit) return null;
+  fit.unweighted = true;
+  delete fit.draft;
+  if (fit.label) {
+    fit.label = String(fit.label).replace(/\s*\(draft[^)]*\)/i, '').trim() || 'Fit & Communication';
+  }
+  return fit;
+}
+
+function r2FitDimKey() {
+  const fit = r2FitDim();
+  return (fit && fit.key) || 'fit_communication';
+}
+
+function isR2DimNoteKey(key) {
+  if (!key) return false;
+  if (key === r2FitDimKey()) return true;
+  const dims = (B.rubrics.round2 && B.rubrics.round2.dims) || [];
+  return dims.some(function (d) { return d && d.key === key; });
+}
+
+function r2DimNote(g, key) {
+  if (!g || !key) return '';
+  if (g.dimNotes && noteText(g.dimNotes[key]).trim()) return g.dimNotes[key];
+  if (g.qnotes && typeof g.qnotes[key] === 'string') return g.qnotes[key];
+  return '';
+}
+
 function round2Total(g) {
-  const dims = B.rubrics.round2.dims.map(d => d.key);
+  const dims = r2WeightedDimKeys();
   const scores = (g && g.scores) || {};
-  const vals = dims.map(k => scores[k]).filter(v => typeof v === 'number');
-  const fit = scores.fit_communication;
-  const total = vals.reduce((a, b) => a + b, 0) + (typeof fit === 'number' ? fit : 0);
-  const count = vals.length + (typeof fit === 'number' ? 1 : 0);
-  if (!count) return null;
-  return { total: vals.reduce((a, b) => a + b, 0), max: 24, count: vals.length };
+  const vals = dims.map(function (k) { return scores[k]; }).filter(function (v) { return typeof v === 'number'; });
+  if (!vals.length) return null;
+  return { total: vals.reduce(function (a, b) { return a + b; }, 0), max: 24, count: vals.length };
 }
 
 // An auto-filled academics score on its own doesn't make someone "reviewed" — a person
@@ -2241,6 +2319,176 @@ function r1InterviewTime(applicantId) {
   return (g && g.interviewTime) || '';
 }
 
+function normalizeR2Interviewers(raw) {
+  const out = [];
+  const seen = {};
+  (Array.isArray(raw) ? raw : (raw ? [raw] : [])).forEach(function (id) {
+    const v = String(id || '').trim();
+    if (!v || seen[v]) return;
+    seen[v] = true;
+    out.push(v);
+  });
+  return out.slice(0, 2);
+}
+
+function r2Interviewers(applicantId) {
+  const g = STATE.grades.round2[applicantId];
+  if (g && Array.isArray(g.interviewers)) return normalizeR2Interviewers(g.interviewers);
+  if (g && g.interviewer) return normalizeR2Interviewers([g.interviewer]);
+  return [];
+}
+
+function r2PairKey(ids) {
+  const list = normalizeR2Interviewers(ids).slice().sort();
+  return list.length ? list.join('|') : '';
+}
+
+function r2PairLabel(ids) {
+  const list = normalizeR2Interviewers(ids);
+  if (!list.length) return '';
+  return list.map(function (id) { return interviewerShort(id) || interviewerName(id) || id; }).join(' & ');
+}
+
+function r2InterviewRoom(applicantId) {
+  const g = STATE.grades.round2[applicantId];
+  return (g && g.interviewRoom) || '';
+}
+
+function r2InterviewTime(applicantId) {
+  const g = STATE.grades.round2[applicantId];
+  return (g && g.interviewTime) || '';
+}
+
+function r2InterviewDateKey(raw) {
+  const s = String(raw || '');
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : '';
+}
+
+function formatInterviewDate(raw) {
+  const key = r2InterviewDateKey(raw);
+  if (!key) return '';
+  const parts = key.split('-').map(Number);
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  if (isNaN(d.getTime())) return key;
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function r2PairIncludes(applicantId, interviewerId) {
+  if (!interviewerId) return false;
+  return r2Interviewers(applicantId).indexOf(interviewerId) >= 0;
+}
+
+function r2KnownRooms() {
+  const seen = {};
+  const out = [];
+  ['HVNR 123', 'HVNR 124', 'HVNR 125', 'HVNR 126', 'No room booked'].forEach(function (r) {
+    seen[r] = true;
+    out.push(r);
+  });
+  Object.keys(STATE.grades.round2 || {}).forEach(function (id) {
+    const room = r2InterviewRoom(id);
+    if (room && !seen[room]) { seen[room] = true; out.push(room); }
+  });
+  return out;
+}
+
+function r2KnownPairs() {
+  const map = {};
+  poolForRound('round2').forEach(function (a) {
+    const ids = r2Interviewers(a.id);
+    const key = r2PairKey(ids);
+    if (!key) return;
+    if (!map[key]) map[key] = { key: key, ids: ids.slice().sort(), label: r2PairLabel(ids.slice().sort()) };
+  });
+  return Object.keys(map).sort(function (a, b) {
+    return map[a].label.localeCompare(map[b].label);
+  }).map(function (k) { return map[k]; });
+}
+
+function r2KnownDates() {
+  const seen = {};
+  poolForRound('round2').forEach(function (a) {
+    const key = r2InterviewDateKey(r2InterviewTime(a.id));
+    if (key) seen[key] = true;
+  });
+  return Object.keys(seen).sort();
+}
+
+function r2InterviewerOptionsHtml(selected) {
+  const ivs = STATE.interviewers || [];
+  let html = '<option value="">Unassigned</option>';
+  ivs.forEach(function (iv) {
+    html += `<option value="${esc(iv.id)}" ${selected === iv.id ? 'selected' : ''}>${esc(iv.name)}</option>`;
+  });
+  if (selected && !ivs.some(function (iv) { return iv.id === selected; })) {
+    html += `<option value="${esc(selected)}" selected>${esc(interviewerName(selected) || selected)}</option>`;
+  }
+  return html;
+}
+
+function r2AssignBlockHtml(a, g) {
+  const pair = r2Interviewers(a.id);
+  const rooms = r2KnownRooms();
+  const room = r2InterviewRoom(a.id);
+  const time = r2InterviewTime(a.id);
+  return `
+        <div class="avg-display">${headerScoreInner('round2', g, a)}</div>
+        <div class="r1-app-score" title="First Round interview average">${formatRound1ScorePairHtml(a.id)} <span class="of">first round</span></div>
+        <div class="field-label assign-label">Interview pair</div>
+        <select id="r2Interviewer0" title="Interviewer 1"${readOnly ? ' disabled' : ''}>${r2InterviewerOptionsHtml(pair[0] || '')}</select>
+        <select id="r2Interviewer1" title="Interviewer 2"${readOnly ? ' disabled' : ''}>${r2InterviewerOptionsHtml(pair[1] || '')}</select>
+        <div class="field-label assign-label">Room</div>
+        <select id="r2InterviewRoom" title="Interview room"${readOnly ? ' disabled' : ''}>
+          <option value="">No room</option>
+          ${rooms.map(function (r) {
+            return `<option value="${esc(r)}" ${room === r ? 'selected' : ''}>${esc(r)}</option>`;
+          }).join('')}
+          ${room && rooms.indexOf(room) < 0 ? `<option value="${esc(room)}" selected>${esc(room)}</option>` : ''}
+        </select>
+        <div class="field-label assign-label">Date & time</div>
+        <input type="datetime-local" id="r2InterviewTime" value="${esc(time || '')}"${readOnly ? ' disabled' : ''}>`;
+}
+
+function persistR2Schedule(a) {
+  const rec = getGrade('round2', a.id);
+  const time = document.getElementById('r2InterviewTime');
+  const room = document.getElementById('r2InterviewRoom');
+  const i0 = document.getElementById('r2Interviewer0');
+  const i1 = document.getElementById('r2Interviewer1');
+  rec.interviewers = normalizeR2Interviewers([i0 && i0.value, i1 && i1.value]);
+  rec.interviewRoom = room && room.value ? room.value : undefined;
+  rec.interviewTime = time && time.value ? time.value : undefined;
+  saveGrade('round2', a.id, 'interviewers', null, rec.interviewers.slice());
+  saveGrade('round2', a.id, 'interviewRoom', null, rec.interviewRoom || null);
+  saveGrade('round2', a.id, 'interviewTime', null, rec.interviewTime || null);
+}
+
+function bindR2AssignControls(a) {
+  if (STATE.gradeRound !== 'round2') return;
+  ['r2Interviewer0', 'r2Interviewer1', 'r2InterviewRoom', 'r2InterviewTime'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', function () { persistR2Schedule(a); });
+  });
+}
+
+function syncR2AssignFields(g) {
+  if (!g) return;
+  const pair = normalizeR2Interviewers(g.interviewers);
+  const map = [
+    ['r2Interviewer0', pair[0] || ''],
+    ['r2Interviewer1', pair[1] || ''],
+    ['r2InterviewRoom', g.interviewRoom || ''],
+    ['r2InterviewTime', g.interviewTime || ''],
+  ];
+  map.forEach(function (pairEl) {
+    const el = document.getElementById(pairEl[0]);
+    if (!el || document.activeElement === el) return;
+    if (el.value !== pairEl[1]) el.value = pairEl[1];
+  });
+}
+
 function formatInterviewTime(raw) {
   if (!raw) return '';
   const d = new Date(raw);
@@ -2336,6 +2584,11 @@ function activeReviewGroup(round, applicantId) {
     if (STATE.filterInterviewer && STATE.filterInterviewer !== 'all') return STATE.filterInterviewer;
     return r1InterviewerId(applicantId) || null;
   }
+  if (round === 'round2') {
+    if (STATE.filterR2Interviewer && STATE.filterR2Interviewer !== 'all') return STATE.filterR2Interviewer;
+    const pair = r2Interviewers(applicantId);
+    return pair[0] || null;
+  }
   if (STATE.filterGroup && STATE.filterGroup !== 'all') return STATE.filterGroup;
   return ensureAssignment(round, applicantId);
 }
@@ -2356,13 +2609,26 @@ function sortApplicantList(list, round) {
     else if (STATE.sortKey === 'r1std') { av = standardizedRound1Score(a.id) ?? -1; bv = standardizedRound1Score(b.id) ?? -1; }
     else if (STATE.sortKey === 'group') {
       if (round === 'round1') { av = interviewerName(r1InterviewerId(a.id)) || ''; bv = interviewerName(r1InterviewerId(b.id)) || ''; }
+      else if (round === 'round2') { av = r2PairLabel(r2Interviewers(a.id)) || ''; bv = r2PairLabel(r2Interviewers(b.id)) || ''; }
       else { av = ensureAssignment(round, a.id) || ''; bv = ensureAssignment(round, b.id) || ''; }
     }
-    else if (STATE.sortKey === 'time') { av = r1InterviewTime(a.id) || ''; bv = r1InterviewTime(b.id) || ''; }
+    else if (STATE.sortKey === 'time') {
+      av = (round === 'round2' ? r2InterviewTime(a.id) : r1InterviewTime(a.id)) || '';
+      bv = (round === 'round2' ? r2InterviewTime(b.id) : r1InterviewTime(b.id)) || '';
+      if (round === 'round2') {
+        if (!av && bv) return 1;
+        if (av && !bv) return -1;
+      }
+    }
+    else if (STATE.sortKey === 'room') {
+      av = r2InterviewRoom(a.id) || ''; bv = r2InterviewRoom(b.id) || '';
+    }
     else if (STATE.sortKey === 'appscore') { av = screenBlendScore(a.id) ?? -1; bv = screenBlendScore(b.id) ?? -1; }
     else { av = a.name; bv = b.name; }
     if (av < bv) return STATE.sortDir === 'asc' ? -1 : 1;
     if (av > bv) return STATE.sortDir === 'asc' ? 1 : -1;
+    if (a.name < b.name) return -1;
+    if (a.name > b.name) return 1;
     return 0;
   });
 }
@@ -2374,6 +2640,11 @@ function incompleteQueue(round, groupId) {
       return r1InterviewerId(a.id) === groupId && !hasR1InterviewScore(STATE.grades.round1[a.id]);
     }), round);
   }
+  if (round === 'round2') {
+    return sortApplicantList(poolForRound(round).filter(function (a) {
+      return r2PairIncludes(a.id, groupId) && !hasManualScore(STATE.grades.round2[a.id]);
+    }), round);
+  }
   return sortApplicantList(poolForRound(round).filter(function (a) {
     return ensureAssignment(round, a.id) === groupId && !hasManualScore(STATE.grades[round][a.id]);
   }), round);
@@ -2383,6 +2654,11 @@ function assignedInListOrder(round, groupId) {
   if (round === 'round1') {
     return sortApplicantList(poolForRound(round).filter(function (a) {
       return r1InterviewerId(a.id) === groupId;
+    }), round);
+  }
+  if (round === 'round2') {
+    return sortApplicantList(poolForRound(round).filter(function (a) {
+      return r2PairIncludes(a.id, groupId);
     }), round);
   }
   return sortApplicantList(poolForRound(round).filter(function (a) {
@@ -2417,7 +2693,7 @@ function prevIncompleteInPool(round, groupId, currentId) {
 }
 
 function queueCountText(round, groupId, applicantId) {
-  const name = round === 'round1'
+  const name = (round === 'round1' || round === 'round2')
     ? (interviewerShort(groupId) || interviewerName(groupId) || 'interviewer')
     : ((STATE.groups.find(function (g) { return g.id === groupId; }) || {}).name || 'group');
   const q = incompleteQueue(round, groupId);
@@ -2433,6 +2709,14 @@ function reviewAsChipsHtml(round) {
       <span class="lbl">My interviews</span>
       ${(STATE.interviewers || []).map(function (iv) {
         return `<label class="chip ${STATE.filterInterviewer === iv.id ? 'active' : ''}" data-reviewas-r1="${esc(iv.id)}">${esc(interviewerShort(iv.id) || iv.name)}</label>`;
+      }).join('')}
+    </span>`;
+  }
+  if (round === 'round2') {
+    return `<span class="review-as">
+      <span class="lbl">My pair</span>
+      ${(STATE.interviewers || []).map(function (iv) {
+        return `<label class="chip ${STATE.filterR2Interviewer === iv.id ? 'active' : ''}" data-reviewas-r2="${esc(iv.id)}">${esc(interviewerShort(iv.id) || iv.name)}</label>`;
       }).join('')}
     </span>`;
   }
@@ -2456,6 +2740,15 @@ function bindReviewAs(root, onChange) {
     el.addEventListener('click', () => {
       const id = el.dataset.reviewasR1;
       STATE.filterInterviewer = STATE.filterInterviewer === id ? 'all' : id;
+      STATE.queueTrail = [];
+      STATE.queueDone = false;
+      onChange();
+    });
+  });
+  root.querySelectorAll('[data-reviewas-r2]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.reviewasR2;
+      STATE.filterR2Interviewer = STATE.filterR2Interviewer === id ? 'all' : id;
       STATE.queueTrail = [];
       STATE.queueDone = false;
       onChange();
@@ -2766,6 +3059,7 @@ function renderOverview() {
     ${advanceHtml}
     ${interviewerHtml}
     ${advanceRd2Html}
+    ${renderOverviewR2FiltersCard()}
 
     <div class="two-col">
       <div>
@@ -2831,6 +3125,7 @@ function renderOverview() {
   bindAdvanceCard();
   bindInterviewerCard();
   bindAdvanceRd2Card();
+  bindOverviewR2Filters();
 }
 
 function renderAdvanceCard() {
@@ -2874,6 +3169,30 @@ function renderAdvanceCard() {
     </div>
     <div class="advance-list" id="advanceList">${rows}</div>
   </div>`;
+}
+
+function renderOverviewR2FiltersCard() {
+  const n = poolForRound('round2').length;
+  return `<div class="card card-pad" style="margin-bottom:22px;">
+    <div class="section-title">Second Round schedule <span class="n">${n} in pool</span></div>
+    <p class="advance-copy">Filter by pair, room, or date the same way as the Second Round list. Default sort is interview time, then name.</p>
+    <div class="filters-bar" style="margin-bottom:0;">
+      ${r2ScheduleFiltersHtml()}
+      <button type="button" class="btn small primary" id="openR2ListBtn">Open Second Round</button>
+    </div>
+  </div>`;
+}
+
+function bindOverviewR2Filters() {
+  bindR2ScheduleFilters(function () {
+    openR2List();
+    render();
+  });
+  const btn = document.getElementById('openR2ListBtn');
+  if (btn) btn.addEventListener('click', function () {
+    openR2List();
+    render();
+  });
 }
 
 function bindAdvanceCard() {
@@ -3754,6 +4073,17 @@ function applyLiveR2GradeUpdate() {
   (R.dims || []).forEach(function (d) { updateR2ScoreUI(main, g, d.key); });
   if (R.fitDim) updateR2ScoreUI(main, g, R.fitDim.key);
   updateR2ScoreUI(main, g, 'caseScore');
+  main.querySelectorAll('textarea[data-notekey]').forEach(function (ta) {
+    if (document.activeElement === ta) return;
+    const key = ta.dataset.notekey;
+    let next = '';
+    if (key === '__main') next = g.notes || '';
+    else if (key === '__case') next = g.caseNotes || '';
+    else if (isR2DimNoteKey(key)) next = r2DimNote(g, key) || '';
+    else next = (g.qnotes && g.qnotes[key]) || '';
+    if (ta.value !== next) ta.value = next;
+  });
+  syncR2AssignFields(g);
   updateHeaderScore('round2', g, a);
 }
 
@@ -3908,6 +4238,34 @@ function filteredRoundPool(round) {
     } else if (STATE.filterAdvanceRd2 === 'not') {
       list = list.filter(function (a) { return !isExplicitlyAdvancingRd2(a.id); });
     }
+  } else if (round === 'round2') {
+    if (STATE.filterR2Pair && STATE.filterR2Pair !== 'all') {
+      if (STATE.filterR2Pair === 'unassigned') {
+        list = list.filter(function (a) { return !r2Interviewers(a.id).length; });
+      } else {
+        list = list.filter(function (a) { return r2PairKey(r2Interviewers(a.id)) === STATE.filterR2Pair; });
+      }
+    }
+    if (STATE.filterR2Room && STATE.filterR2Room !== 'all') {
+      if (STATE.filterR2Room === 'unassigned') {
+        list = list.filter(function (a) { return !r2InterviewRoom(a.id); });
+      } else {
+        list = list.filter(function (a) { return r2InterviewRoom(a.id) === STATE.filterR2Room; });
+      }
+    }
+    if (STATE.filterR2Date && STATE.filterR2Date !== 'all') {
+      if (STATE.filterR2Date === 'notime') {
+        list = list.filter(function (a) { return !r2InterviewTime(a.id); });
+      } else {
+        list = list.filter(function (a) { return r2InterviewDateKey(r2InterviewTime(a.id)) === STATE.filterR2Date; });
+      }
+    }
+    if (STATE.filterR2Interviewer && STATE.filterR2Interviewer !== 'all') {
+      list = list.filter(function (a) { return r2PairIncludes(a.id, STATE.filterR2Interviewer); });
+    }
+    if (STATE.incompleteOnly) {
+      list = list.filter(function (a) { return !hasManualScore(STATE.grades.round2[a.id]); });
+    }
   } else {
     if (STATE.filterGroup !== 'all') list = list.filter(a => ensureAssignment(round, a.id) === STATE.filterGroup);
     if (STATE.incompleteOnly && STATE.filterGroup !== 'all') {
@@ -3934,7 +4292,7 @@ function filteredFlaggedPool() {
 }
 
 function roundListRowsHtml(round, list) {
-  const cols = round === 'round1' ? 8 : 6;
+  const cols = round === 'round1' ? 8 : round === 'round2' ? 6 : 6;
   return list.map(a => renderRow(round, a)).join('') || `<tr><td colspan="${cols}"><div class="empty-state">${emptyRoundMessage(round)}</div></td></tr>`;
 }
 
@@ -4011,10 +4369,89 @@ function refreshFlaggedListRows() {
   bindApplicantRowClicks(openFlaggedApplicant);
 }
 
+function r2ScheduleFiltersHtml() {
+  const pairs = r2KnownPairs();
+  const rooms = r2KnownRooms();
+  const dates = r2KnownDates();
+  return `
+      <select id="r2PairFilter">
+        <option value="all">All pairs</option>
+        <option value="unassigned" ${STATE.filterR2Pair === 'unassigned' ? 'selected' : ''}>Unassigned pair</option>
+        ${pairs.map(function (p) {
+          return `<option value="${esc(p.key)}" ${STATE.filterR2Pair === p.key ? 'selected' : ''}>${esc(p.label)}</option>`;
+        }).join('')}
+      </select>
+      <select id="r2RoomFilter">
+        <option value="all">All rooms</option>
+        <option value="unassigned" ${STATE.filterR2Room === 'unassigned' ? 'selected' : ''}>No room</option>
+        ${rooms.map(function (r) {
+          return `<option value="${esc(r)}" ${STATE.filterR2Room === r ? 'selected' : ''}>${esc(r)}</option>`;
+        }).join('')}
+      </select>
+      <select id="r2DateFilter">
+        <option value="all">All dates</option>
+        <option value="notime" ${STATE.filterR2Date === 'notime' ? 'selected' : ''}>Missing time</option>
+        ${dates.map(function (d) {
+          return `<option value="${esc(d)}" ${STATE.filterR2Date === d ? 'selected' : ''}>${esc(formatInterviewDate(d + 'T12:00'))}</option>`;
+        }).join('')}
+      </select>
+      <label class="chip ${STATE.filterR2Pair === 'unassigned' ? 'active' : ''}" id="r2UnassignedChip">Unassigned</label>
+      <label class="chip ${STATE.filterR2Date === 'notime' ? 'active' : ''}" id="r2NoTimeChip">Missing time</label>`;
+}
+
+function bindR2ScheduleFilters(onChange) {
+  const pairEl = document.getElementById('r2PairFilter');
+  if (pairEl) pairEl.addEventListener('change', function (e) {
+    STATE.filterR2Pair = e.target.value;
+    STATE.queueTrail = [];
+    onChange();
+  });
+  const roomEl = document.getElementById('r2RoomFilter');
+  if (roomEl) roomEl.addEventListener('change', function (e) {
+    STATE.filterR2Room = e.target.value;
+    STATE.queueTrail = [];
+    onChange();
+  });
+  const dateEl = document.getElementById('r2DateFilter');
+  if (dateEl) dateEl.addEventListener('change', function (e) {
+    STATE.filterR2Date = e.target.value;
+    STATE.queueTrail = [];
+    onChange();
+  });
+  const unassigned = document.getElementById('r2UnassignedChip');
+  if (unassigned) unassigned.addEventListener('click', function () {
+    STATE.filterR2Pair = STATE.filterR2Pair === 'unassigned' ? 'all' : 'unassigned';
+    STATE.queueTrail = [];
+    onChange();
+  });
+  const noTime = document.getElementById('r2NoTimeChip');
+  if (noTime) noTime.addEventListener('click', function () {
+    STATE.filterR2Date = STATE.filterR2Date === 'notime' ? 'all' : 'notime';
+    STATE.queueTrail = [];
+    onChange();
+  });
+}
+
+function openR2List() {
+  STATE.view = 'round:round2';
+  STATE.currentApplicantId = null;
+  STATE.returnView = null;
+  STATE.flaggedOnly = false;
+  if (!STATE.r2SortTouched) {
+    STATE.sortKey = 'time';
+    STATE.sortDir = 'asc';
+  }
+}
+
 function renderRoundList(round) {
+  if (round === 'round2' && !STATE.r2SortTouched) {
+    STATE.sortKey = 'time';
+    STATE.sortDir = 'asc';
+  }
   const list = filteredRoundPool(round);
   const yearOpts = ['Freshman', 'Sophomore', 'Junior', 'Senior'].filter(y => STATE.applicants.some(a => a.classYear === y));
   const r1 = round === 'round1';
+  const r2 = round === 'round2';
   const groupFilter = r1
     ? `<select id="interviewerFilter">
         <option value="all">All interviewers</option>
@@ -4023,7 +4460,9 @@ function renderRoundList(round) {
           return `<option value="${esc(iv.id)}" ${STATE.filterInterviewer === iv.id ? 'selected' : ''}>${esc(iv.name)}</option>`;
         }).join('')}
       </select>`
-    : `<select id="groupFilter">
+    : r2
+      ? r2ScheduleFiltersHtml()
+      : `<select id="groupFilter">
         <option value="all">All groups</option>
         ${STATE.groups.map(g => `<option value="${g.id}" ${STATE.filterGroup === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
       </select>`;
@@ -4036,10 +4475,15 @@ function renderRoundList(round) {
           <th data-sort="appscore" class="${STATE.sortKey === 'appscore' ? 'sorted' : ''}">App /5</th>
           <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}">R1 avg</th>
           <th data-sort="r1std" class="${STATE.sortKey === 'r1std' ? 'sorted' : ''}" title="Interviewer-adjusted First Round score">Std</th>`
-    : `<th data-sort="name" class="${STATE.sortKey === 'name' ? 'sorted' : ''}">Applicant</th>
-          ${round === 'round2'
-            ? `<th data-sort="r1score" class="${STATE.sortKey === 'r1score' || STATE.sortKey === 'gpa' ? 'sorted' : ''}" title="First Round average and interviewer-standardized score">R1 avg</th>`
-            : `<th data-sort="gpa" class="${STATE.sortKey === 'gpa' ? 'sorted' : ''}">GPA</th>`}
+    : r2
+      ? `<th data-sort="name" class="${STATE.sortKey === 'name' ? 'sorted' : ''}">Applicant</th>
+          <th data-sort="group" class="${STATE.sortKey === 'group' ? 'sorted' : ''}">Pair</th>
+          <th data-sort="time" class="${STATE.sortKey === 'time' ? 'sorted' : ''}">Time</th>
+          <th data-sort="room" class="${STATE.sortKey === 'room' ? 'sorted' : ''}">Room</th>
+          <th data-sort="r1score" class="${STATE.sortKey === 'r1score' || STATE.sortKey === 'gpa' ? 'sorted' : ''}" title="First Round average and interviewer-standardized score">R1 avg</th>
+          <th data-sort="score" class="${STATE.sortKey === 'score' ? 'sorted' : ''}">Case /24</th>`
+      : `<th data-sort="name" class="${STATE.sortKey === 'name' ? 'sorted' : ''}">Applicant</th>
+          <th data-sort="gpa" class="${STATE.sortKey === 'gpa' ? 'sorted' : ''}">GPA</th>
           <th>Position</th>
           <th>Attendance</th>
           <th data-sort="group" class="${STATE.sortKey === 'group' ? 'sorted' : ''}">Reviewer group</th>
@@ -4063,9 +4507,10 @@ function renderRoundList(round) {
       <div class="topbar-spacer"></div>
       <span class="sub" id="listCount" style="color:var(--slate); font-size:12px;">${listCountLabel(round, list)}</span>
     </div>
-    ${r1 || round === 'round2' ? rd2ListEmailToolsHtml() : ''}
-    ${!r1 && STATE.incompleteOnly && STATE.filterGroup === 'all' ? `<div class="queue-hint">Pick your review group to see only that pair’s unfinished assigned applications. Other groups stay visible until you do.</div>` : ''}
+    ${r1 || r2 ? rd2ListEmailToolsHtml() : ''}
+    ${!r1 && !r2 && STATE.incompleteOnly && STATE.filterGroup === 'all' ? `<div class="queue-hint">Pick your review group to see only that pair’s unfinished assigned applications. Other groups stay visible until you do.</div>` : ''}
     ${r1 ? `<div class="queue-hint">Pick an interviewer to filter to their interviews. Unassigned people need someone chosen on their profile — it is not random.</div>` : ''}
+    ${r2 ? `<div class="queue-hint">Filter by pair, room, or date to find today’s interviews. Pick your name under My pair. Unassigned people need a pair and time on their profile.</div>` : ''}
     <div class="table-wrap">
       <table class="grid">
         <thead><tr>
@@ -4082,6 +4527,7 @@ function renderRoundList(round) {
   if (groupEl) groupEl.addEventListener('change', e => { STATE.filterGroup = e.target.value; STATE.queueTrail = []; renderRoundList(round); });
   const ivEl = document.getElementById('interviewerFilter');
   if (ivEl) ivEl.addEventListener('change', e => { STATE.filterInterviewer = e.target.value; STATE.queueTrail = []; renderRoundList(round); });
+  if (r2) bindR2ScheduleFilters(function () { renderRoundList(round); });
   document.getElementById('yearFilter').addEventListener('change', e => { STATE.filterYear = e.target.value; renderRoundList(round); });
   const advToggle = document.getElementById('advToggle');
   if (advToggle) advToggle.addEventListener('click', () => { STATE.screenedOnly = !STATE.screenedOnly; renderRoundList(round); });
@@ -4095,10 +4541,11 @@ function renderRoundList(round) {
   if (flaggedToggle) flaggedToggle.addEventListener('click', () => { STATE.flaggedOnly = !STATE.flaggedOnly; renderRoundList(round); });
   const incompleteToggle = document.getElementById('incompleteToggle');
   if (incompleteToggle) incompleteToggle.addEventListener('click', () => { STATE.incompleteOnly = !STATE.incompleteOnly; renderRoundList(round); });
-  if (r1 || round === 'round2') bindRd2EmailTools();
+  if (r1 || r2) bindRd2EmailTools();
   bindReviewAs(contentEl, () => renderRoundList(round));
   contentEl.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const k = th.dataset.sort;
+    if (round === 'round2') STATE.r2SortTouched = true;
     if (STATE.sortKey === k) STATE.sortDir = STATE.sortDir === 'asc' ? 'desc' : 'asc'; else { STATE.sortKey = k; STATE.sortDir = 'asc'; }
     renderRoundList(round);
   }));
@@ -4196,6 +4643,19 @@ function renderRow(round, a) {
       <td><span class="score-pill ${std == null ? 'none' : scoreClass}" title="${std == null ? 'Needs an assigned interviewer and a First Round average' : 'raw − interviewer mean + overall mean'}">${std == null ? '—' : std.toFixed(1)}</span></td>
     </tr>`;
   }
+  if (round === 'round2') {
+    const pair = r2PairLabel(r2Interviewers(a.id));
+    const time = formatInterviewTime(r2InterviewTime(a.id));
+    const room = r2InterviewRoom(a.id);
+    return `<tr class="clickable" role="button" tabindex="0" data-id="${a.id}">
+      <td><div class="name-cell"><span class="nm">${esc(a.name)}${lateBadge(a)}${flagBadge(a)}${vouchCount(a.id) ? `<span class="vouch-badge" title="Vouched for by ${esc(vouchNames(a.id))}">★ ${vouchCount(a.id)}</span>` : ''}</span><span class="sub">${esc(a.classYear)} · ${esc(a.major || '')}</span></div></td>
+      <td>${pair ? esc(pair) : '<span class="unassigned-pill">Unassigned</span>'}</td>
+      <td>${time ? esc(time) : '<span class="sub">—</span>'}</td>
+      <td>${room ? esc(room) : '<span class="sub">—</span>'}</td>
+      <td><span class="score-pill pair">${formatRound1ScorePairHtml(a.id)}</span></td>
+      <td><span class="score-pill ${scoreClass}">${score === null ? '—' : score}</span></td>
+    </tr>`;
+  }
   const grp = assignmentGroup(round, a.id);
   const priorCol = round === 'round2'
     ? `<td><span class="score-pill pair">${formatRound1ScorePairHtml(a.id)}</span></td>`
@@ -4273,9 +4733,10 @@ function renderGrade() {
         <div class="side-stack" id="gradeSide"></div>
       </div>`;
 
-  const assignBlock = round === 'round1' ? r1AssignBlockHtml(a, g) : `
+  const assignBlock = round === 'round1' ? r1AssignBlockHtml(a, g)
+    : round === 'round2' ? r2AssignBlockHtml(a, g)
+    : `
         <div class="avg-display">${headerScoreInner(round, g, a)}</div>
-        ${round === 'round2' ? `<div class="r1-app-score" title="First Round interview average">${formatRound1ScorePairHtml(a.id)} <span class="of">first round</span></div>` : ''}
         <div class="field-label assign-label">Assigned review group</div>
         <select id="groupPicker" title="Who is reviewing this application">
           ${STATE.groups.map(gr => `<option value="${gr.id}" ${ensureAssignment(round, a.id) === gr.id ? 'selected' : ''}>${esc(gr.name)}</option>`).join('')}
@@ -4321,8 +4782,9 @@ function renderGrade() {
     });
   });
   bindR1AssignControls(a, g);
+  bindR2AssignControls(a);
   const knowBtn = document.getElementById('knowPersonBtn');
-  if (knowBtn && round !== 'round1') knowBtn.addEventListener('click', function () { reassignKnownPerson(round, a.id); });
+  if (knowBtn && round !== 'round1' && round !== 'round2') knowBtn.addEventListener('click', function () { reassignKnownPerson(round, a.id); });
   bindQueueNav(round, a.id);
 
   if (round === 'screen') renderScreenGrade(a, g);
@@ -4463,6 +4925,11 @@ function bindNotesFields(container, round, applicantId) {
         g.qnotes = g.qnotes || {};
         g.qnotes[ta.dataset.notekey] = ta.value;
         saveGrade(round, applicantId, 'qnotes', null, cloneJson(g.qnotes));
+        if (round === 'round2' && isR2DimNoteKey(ta.dataset.notekey)) {
+          g.dimNotes = g.dimNotes || {};
+          g.dimNotes[ta.dataset.notekey] = ta.value;
+          saveGrade(round, applicantId, 'dimNotes', null, cloneJson(g.dimNotes));
+        }
       }
     }
     ta.addEventListener('input', persist);
@@ -4833,6 +5300,7 @@ function bindR2BandOpts(root, a) {
       }
       rec.scores[key] = rec.scores[key] === val ? undefined : val;
       if (rec.qnotes) saveGrade('round2', a.id, 'qnotes', null, cloneJson(rec.qnotes));
+      if (rec.dimNotes) saveGrade('round2', a.id, 'dimNotes', null, cloneJson(rec.dimNotes));
       saveGrade('round2', a.id, 'score', key, rec.scores[key]);
       updateR2ScoreUI(main, rec, key);
       updateHeaderScore('round2', rec);
@@ -5072,6 +5540,22 @@ function syncR2CaseRows(container, g, a) {
   });
 }
 
+function r2DimCardHtml(d, g, unweighted) {
+  const R = B.rubrics.round2;
+  const note = r2DimNote(g, d.key);
+  return `
+      <div class="dim-card">
+        <div class="dim-head"><h4>${esc(d.label)}</h4>${unweighted ? '<span class="chip unweighted">Unweighted</span>' : ''}${r2ScorePill(g.scores[d.key])}</div>
+        <div class="dim-body">
+          <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
+            ${d.levels.map((txt, i) => { const val = 4 - i; return `<div class="band-opt ${g.scores[d.key] === val ? 'sel' : ''}" data-key="${d.key}" data-val="${val}"><span class="sc">${R.levelLabels[i]}</span>${esc(txt)}</div>`; }).join('')}
+          </div>
+          <div class="field-label">Comments</div>
+          <div class="notes-field"><textarea data-notekey="${esc(d.key)}" placeholder="Notes on ${esc(d.label)}…">${esc(note)}</textarea></div>
+        </div>
+      </div>`;
+}
+
 function renderRound2Grade(a, g) {
   const main = document.getElementById('gradeMain');
   const R = B.rubrics.round2;
@@ -5080,8 +5564,10 @@ function renderRound2Grade(a, g) {
   if (!Array.isArray(g.behavioralSelected)) g.behavioralSelected = r2BehavioralSelected(g);
   const selected = r2BehavioralSelected(g);
   const qs = r2BehavioralList();
+  const fit = r2FitDim() || { key: 'fit_communication', label: 'Fit & Communication', levels: [] };
 
   main.innerHTML = `
+    <div class="weight-note">Case total is the six case dimensions / 24. Fit &amp; Communication is scored with comments but unweighted — it does not change the total.</div>
     <div class="dim-card r2-behaviorals-card">
       <div class="dim-head">
         <h4>Behavioral questions — choose 1–2</h4>
@@ -5115,25 +5601,8 @@ function renderRound2Grade(a, g) {
         <div class="notes-field"><textarea id="r2CaseNotes" data-notekey="__case" placeholder="Walkthrough notes, standout moments, gaps…">${esc(g.caseNotes || '')}</textarea></div>
       </div>
     </div>
-    ${R.dims.map(d => `
-      <div class="dim-card">
-        <div class="dim-head"><h4>${esc(d.label)}</h4>${r2ScorePill(g.scores[d.key])}</div>
-        <div class="dim-body">
-          <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
-            ${d.levels.map((txt, i) => { const val = 4 - i; return `<div class="band-opt ${g.scores[d.key] === val ? 'sel' : ''}" data-key="${d.key}" data-val="${val}"><span class="sc">${R.levelLabels[i]}</span>${esc(txt)}</div>`; }).join('')}
-          </div>
-        </div>
-      </div>
-    `).join('')}
-    <div class="dim-card">
-      <div class="dim-head draft"><h4>${esc(R.fitDim.label)}</h4>${r2ScorePill(g.scores[R.fitDim.key])}</div>
-      <div class="dim-body">
-        <div class="sub" style="color:var(--warn); margin-bottom:8px;">No official rubric was on file for the behavioral half of the final round — this is a draft dimension kept so last year's scores stay attached.</div>
-        <div class="band-row" style="grid-template-columns: repeat(4,1fr);">
-          ${R.fitDim.levels.map((txt, i) => { const val = 4 - i; return `<div class="band-opt ${g.scores[R.fitDim.key] === val ? 'sel' : ''}" data-key="${R.fitDim.key}" data-val="${val}"><span class="sc">${R.levelLabels[i]}</span>${esc(txt)}</div>`; }).join('')}
-        </div>
-      </div>
-    </div>
+    ${R.dims.map(function (d) { return r2DimCardHtml(d, g, false); }).join('')}
+    ${r2DimCardHtml(fit, g, true)}
     <div class="card card-pad">
       <div class="field-label">Recommendation</div>
       <div class="recommend-row">
@@ -5458,7 +5927,7 @@ function buildCsv(round) {
       return [a.name, a.email, interviewerName(g.interviewer) || '', g.interviewTime || '', g.initialNotes || '', g.thankYou ? 'Yes' : 'No', g.knowFlag ? 'Yes' : '', g.scores.fit0 ?? '', g.scores.fit1 ?? '', g.scores.fit2 ?? '', g.scores.personal1 ?? '', g.scores.personal2 ?? '', g.scores.personality ?? '', r1raw ?? '', r1std == null ? '' : +r1std.toFixed(3), r1blend == null ? '' : +r1blend.toFixed(3), raw ?? '', std == null ? '' : +std.toFixed(3), g.recommendation || '', g.notes || ''];
     });
   } else {
-    header = ['Candidate (First & Last) Name', 'Case Assigned', 'Introduction', 'Framework', 'Market Sizing', 'Quant Reasoning', 'Brainstorming', 'Recommendation Dim', 'Fit & Communication', 'Final Grade / 24', 'Behaviorals asked', 'Case overall', 'Recommendation', 'Interviewer Notes'];
+    header = ['Candidate (First & Last) Name', 'Pair', 'Room', 'Interview time', 'Case Assigned', 'Introduction', 'Framework', 'Market Sizing', 'Quant Reasoning', 'Brainstorming', 'Recommendation Dim', 'Fit & Communication', 'Final Grade / 24', 'Behaviorals asked', 'Case overall', 'Recommendation', 'Interviewer Notes'];
     rows = poolForRound('round2').map(a => {
       const g = STATE.grades.round2[a.id] || { scores: {} };
       const caseObj = r2CaseById(g.caseId);
@@ -5467,7 +5936,7 @@ function buildCsv(round) {
         const q = r2BehavioralById(id);
         return (q ? q.title : id) + (typeof g.scores[id] === 'number' ? ' ' + g.scores[id] : '');
       }).join(' | ');
-      return [a.name, caseObj ? r2CaseTitle(caseObj) : '', g.scores.introduction ?? '', g.scores.framework ?? '', g.scores.market_sizing ?? '', g.scores.quant_reasoning ?? '', g.scores.brainstorming ?? '', g.scores.recommendation ?? '', g.scores.fit_communication ?? '', r ? r.total : '', asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
+      return [a.name, r2PairLabel(r2Interviewers(a.id)), r2InterviewRoom(a.id), r2InterviewTime(a.id), caseObj ? r2CaseTitle(caseObj) : '', g.scores.introduction ?? '', g.scores.framework ?? '', g.scores.market_sizing ?? '', g.scores.quant_reasoning ?? '', g.scores.brainstorming ?? '', g.scores.recommendation ?? '', g.scores.fit_communication ?? '', r ? r.total : '', asked, g.caseScore ?? '', g.recommendation || '', g.notes || g.caseNotes || ''];
     });
   }
   const csv = [header, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');

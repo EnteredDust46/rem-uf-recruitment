@@ -397,11 +397,11 @@ def rubric_round2():
             ]},
         ],
         'fitDim': {
-            'key': 'fit_communication', 'label': 'Fit & Communication (draft — edit me)', 'draft': True, 'levels': [
-                'Confident, clear, client-ready communication; strong rapport and composure throughout',
-                'Generally clear and composed, minor moments of hesitation',
-                'Communicates adequately but lacks polish or confidence at times',
-                'Difficulty communicating clearly or building rapport',
+            'key': 'fit_communication', 'label': 'Fit & Communication', 'unweighted': True, 'levels': [
+                'Clear, confident, client-ready presence; strong rapport and composure throughout',
+                'Generally clear and composed, with only brief hesitation or stiffness',
+                'Gets the point across but presence, polish, or composure slips at times',
+                'Hard to follow, withdrawn, or loses composure — rapport does not land',
             ],
         },
         'levelLabels': ['Exceeds Expectations', 'Achieves Expectations', 'Meets Some Expectations', "Doesn't Meet Expectations"],
