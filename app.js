@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-half-vibe-noscroll-20260915';
+const BUILD_STAMP = 'rd2-flush-case-beh-20260915';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -680,6 +680,53 @@ function setR2CaseMinimized(on) {
   try { localStorage.setItem(R2_CASE_MIN_KEY, on ? '1' : '0'); } catch (e) { /* ignore */ }
 }
 
+let r2SplitRo = null;
+let r2SplitResizeBound = false;
+
+function syncR2CaseColHeight() {
+  const root = document.getElementById('r2GradeRoot');
+  const col = root && root.querySelector('.r2-case-col');
+  const pane = document.getElementById('r2CasePane');
+  const rubric = document.getElementById('r2RubricPane');
+  if (!col || !pane) return;
+  const match = !!(root && root.classList.contains('r2-has-case') && root.classList.contains('r2-layout-side'));
+  if (!match || !rubric) {
+    if (root) root.style.removeProperty('--r2-rubric-h');
+    col.style.height = '';
+    pane.style.height = '';
+    pane.style.maxHeight = '';
+    return;
+  }
+  const h = Math.round(rubric.offsetHeight);
+  if (h > 0 && Math.abs((parseFloat(col.style.height) || 0) - h) >= 1) {
+    root.style.setProperty('--r2-rubric-h', h + 'px');
+    col.style.height = h + 'px';
+    pane.style.height = h + 'px';
+    pane.style.maxHeight = h + 'px';
+  }
+}
+
+function bindR2SplitHeightSync() {
+  const rubric = document.getElementById('r2RubricPane');
+  if (r2SplitRo) {
+    r2SplitRo.disconnect();
+    r2SplitRo = null;
+  }
+  syncR2CaseColHeight();
+  requestAnimationFrame(function () {
+    syncR2CaseColHeight();
+    requestAnimationFrame(syncR2CaseColHeight);
+  });
+  if (rubric && typeof ResizeObserver !== 'undefined') {
+    r2SplitRo = new ResizeObserver(function () { syncR2CaseColHeight(); });
+    r2SplitRo.observe(rubric);
+  }
+  if (!r2SplitResizeBound) {
+    r2SplitResizeBound = true;
+    window.addEventListener('resize', syncR2CaseColHeight);
+  }
+}
+
 function applyR2CaseMinimized() {
   const on = getR2CaseMinimized();
   const root = document.getElementById('r2GradeRoot');
@@ -693,7 +740,10 @@ function applyR2CaseMinimized() {
     btn.title = on ? 'Expand case to half' : 'Minimize case';
     btn.textContent = on ? '»' : '«';
   }
-  requestAnimationFrame(function () { autosizeR2Notes(); });
+  requestAnimationFrame(function () {
+    autosizeR2Notes();
+    syncR2CaseColHeight();
+  });
 }
 
 function applyR2CaseLayout(layout) {
@@ -709,6 +759,7 @@ function applyR2CaseLayout(layout) {
     });
   }
   applyR2CaseMinimized();
+  bindR2SplitHeightSync();
 }
 
 function shouldHoldR2AgainstPoll() {
@@ -5551,6 +5602,7 @@ function autosizeR2Notes(root) {
   const scope = root || document.getElementById('gradeMain');
   if (!scope) return;
   scope.querySelectorAll('textarea[data-notekey]').forEach(autosizeTextarea);
+  syncR2CaseColHeight();
 }
 
 function bindR2NoteAutosize(ta) {
@@ -6319,6 +6371,7 @@ function applyR2CaseSplit(g, a, opts) {
     }
   }
   if (opts.fromUser && expanded) revealR2Workspace();
+  bindR2SplitHeightSync();
 }
 
 function persistR2Case(a, caseId) {
@@ -6522,23 +6575,25 @@ function renderRound2Grade(a, g) {
     <div id="r2GradeRoot" class="r2-grade${caseExpanded ? ' r2-has-case' : ''} r2-layout-${esc(caseLayout)}${caseMin ? ' r2-case-minimized' : ''}">
       <div class="weight-note r2-weight-note">Case score is the equal-weight average of scored categories among Intro, Framework, Math, Brainstorm, Recommendation, and Fit and communication/vibe check (/ 4). Behavioral avg is separate — typically 1–2 asked questions — and is not blended with the case score. The Vibe check at the bottom is reference only and does not count toward either average. Collapse or Clear on the case reference does not change scores.</div>
       <div class="r2-split">
-        <div class="r2-case-pane" id="r2CasePane" data-r2-pane="case">
-          <div class="r2-case-toolbar">
-            <div class="r2-case-toolbar-head">
-              <h4>Case reference</h4>
-              <span class="r2-open-case-title" id="r2OpenCaseTitle"${selectedTitle ? '' : ' hidden'}>${esc(selectedTitle)}</span>
-              <button type="button" class="r2-case-collapse" id="r2CaseCollapseBtn"${selectedCaseId ? '' : ' hidden'} aria-expanded="${caseExpanded ? 'true' : 'false'}" aria-label="${caseExpanded ? 'Collapse case reference' : 'Expand case reference'}" title="${caseExpanded ? 'Collapse case reference' : 'Expand case reference'}">${caseExpanded ? '▾' : '▸'}</button>
-              <button type="button" class="r2-case-min" id="r2CaseMinBtn"${caseExpanded ? '' : ' hidden'} aria-pressed="${getR2CaseMinimized() ? 'true' : 'false'}" aria-label="${getR2CaseMinimized() ? 'Expand case to half the page' : 'Minimize case to a thin rail'}" title="${getR2CaseMinimized() ? 'Expand case to half' : 'Minimize case'}">${getR2CaseMinimized() ? '»' : '«'}</button>
+        <div class="r2-case-col">
+          <div class="r2-case-pane" id="r2CasePane" data-r2-pane="case">
+            <div class="r2-case-toolbar">
+              <div class="r2-case-toolbar-head">
+                <h4>Case reference</h4>
+                <span class="r2-open-case-title" id="r2OpenCaseTitle"${selectedTitle ? '' : ' hidden'}>${esc(selectedTitle)}</span>
+                <button type="button" class="r2-case-collapse" id="r2CaseCollapseBtn"${selectedCaseId ? '' : ' hidden'} aria-expanded="${caseExpanded ? 'true' : 'false'}" aria-label="${caseExpanded ? 'Collapse case reference' : 'Expand case reference'}" title="${caseExpanded ? 'Collapse case reference' : 'Expand case reference'}">${caseExpanded ? '▾' : '▸'}</button>
+                <button type="button" class="r2-case-min" id="r2CaseMinBtn"${caseExpanded ? '' : ' hidden'} aria-pressed="${getR2CaseMinimized() ? 'true' : 'false'}" aria-label="${getR2CaseMinimized() ? 'Expand case to half the page' : 'Minimize case to a thin rail'}" title="${getR2CaseMinimized() ? 'Expand case to half' : 'Minimize case'}">${getR2CaseMinimized() ? '»' : '«'}</button>
+              </div>
+              <div class="r2-case-instructions">${esc(r2CaseInstructionsText())}</div>
+              <div class="field-label r2-case-pick-lbl">Case — click to open the interviewer guide</div>
+              <div class="sub r2-bq-hint r2-case-pick-hint">One case per interview. The rubric is independent — Clear only hides this guide.</div>
+              <div id="r2CaseList" class="r2-bq-list r2-case-chips">
+                ${r2CaseList().map(function (c) { return r2CaseRowHtml(c, selectedCaseId, caseExpanded); }).join('')}
+              </div>
             </div>
-            <div class="r2-case-instructions">${esc(r2CaseInstructionsText())}</div>
-            <div class="field-label r2-case-pick-lbl">Case — click to open the interviewer guide</div>
-            <div class="sub r2-bq-hint r2-case-pick-hint">One case per interview. The rubric is independent — Clear only hides this guide.</div>
-            <div id="r2CaseList" class="r2-bq-list r2-case-chips">
-              ${r2CaseList().map(function (c) { return r2CaseRowHtml(c, selectedCaseId, caseExpanded); }).join('')}
+            <div id="r2CaseGuide" class="r2-case-guide" data-case="${esc(selectedCaseId || '')}"${caseExpanded ? '' : ' hidden'}>
+              ${caseExpanded && selectedCase ? r2CaseBodyHtml(selectedCase) : ''}
             </div>
-          </div>
-          <div id="r2CaseGuide" class="r2-case-guide" data-case="${esc(selectedCaseId || '')}"${caseExpanded ? '' : ' hidden'}>
-            ${caseExpanded && selectedCase ? r2CaseBodyHtml(selectedCase) : ''}
           </div>
         </div>
         <div class="r2-rubric-pane" id="r2RubricPane" data-r2-pane="rubric">
@@ -6554,19 +6609,19 @@ function renderRound2Grade(a, g) {
             <div class="field-label">Interviewer notes</div>
             <div class="notes-field"><textarea data-notekey="__main" placeholder="Anything else worth flagging…">${esc(r2RecNoteForGrader(g, graderKey, a.id))}</textarea></div>
           </div>
-          <div class="dim-card r2-behaviorals-card">
-            <div class="dim-head">
-              <h4>Behavioral questions — choose 1–2</h4>
-              <span class="n" id="r2BehavioralCount">${esc(r2SelectedCountHtml(selected))}</span>
-            </div>
-            <div class="dim-body">
-              <div class="sub r2-bq-hint">Click a title to expand it, select it, and take notes. Usually 1–2; more is allowed. Scores here are not part of the case average.</div>
-              <div id="r2BehavioralList" class="r2-bq-list">
-                ${qs.map(function (q) { return r2BehavioralRowHtml(q, g, selected, a.id, graderKey); }).join('')}
-              </div>
-            </div>
-          </div>
           ${r2DimCardHtml(r2VibeDim(), g, a.id, graderKey, { uncounted: true })}
+        </div>
+      </div>
+      <div class="dim-card r2-behaviorals-card">
+        <div class="dim-head">
+          <h4>Behavioral questions — choose 1–2</h4>
+          <span class="n" id="r2BehavioralCount">${esc(r2SelectedCountHtml(selected))}</span>
+        </div>
+        <div class="dim-body">
+          <div class="sub r2-bq-hint">Click a title to expand it, select it, and take notes. Usually 1–2; more is allowed. Scores here are not part of the case average.</div>
+          <div id="r2BehavioralList" class="r2-bq-list">
+            ${qs.map(function (q) { return r2BehavioralRowHtml(q, g, selected, a.id, graderKey); }).join('')}
+          </div>
         </div>
       </div>
       ${r2ProfileFooterHtml(a)}
@@ -6581,7 +6636,11 @@ function renderRound2Grade(a, g) {
   bindR2CaseCollapse(a);
   bindR2CaseMin();
   autosizeR2Notes(main);
-  requestAnimationFrame(function () { autosizeR2Notes(main); });
+  bindR2SplitHeightSync();
+  requestAnimationFrame(function () {
+    autosizeR2Notes(main);
+    bindR2SplitHeightSync();
+  });
   main.querySelectorAll('[data-rec]').forEach(el => el.addEventListener('click', () => {
     captureOpenR2Fields();
     const rec = getGrade('round2', a.id);

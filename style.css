@@ -332,7 +332,7 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
   max-width: 100%;
 }
 .content.r2-grade-page.grade-wide { max-width: none; }
-.r2-grade, .r2-split, .r2-rubric-pane, .r2-case-pane, .dim-card, .dim-body, .r2-bq {
+.r2-grade, .r2-split, .r2-case-col, .r2-rubric-pane, .r2-case-pane, .r2-behaviorals-card, .dim-card, .dim-body, .r2-bq {
   max-width: 100%;
   min-width: 0;
 }
@@ -620,12 +620,14 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 .content.r2-case-open .r2-case-instructions,
 .content.r2-case-open .r2-case-pick-lbl,
 .content.r2-case-open .r2-case-pick-hint { display: none; }
+.r2-grade > .r2-behaviorals-card { margin-top: 16px; }
 .content.r2-case-open .r2-behaviorals-card { margin-top: 16px; }
 .content.r2-case-open .assign-block select,
 .content.r2-case-open .assign-block input[type="datetime-local"] { min-width: 168px; }
 .r2-grade { container-type: inline-size; container-name: r2grade; max-width: 100%; min-width: 0; }
 .r2-split { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; max-width: 100%; min-width: 0; }
-.r2-case-pane, .r2-rubric-pane { min-width: 0; max-width: 100%; }
+.r2-case-col, .r2-case-pane, .r2-rubric-pane { min-width: 0; max-width: 100%; }
+.r2-case-col { display: flex; flex-direction: column; min-height: 0; }
 .r2-grade:not(.r2-has-case) .r2-case-pane {
   background: var(--paper-raised); border: 1px solid var(--line);
   border-radius: var(--radius-m); box-shadow: var(--shadow-card);
@@ -713,28 +715,57 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 }
 .r2-has-case .r2-rubric-pane {
   overflow: visible;
-  overflow-x: hidden;
   max-height: none;
+  height: auto;
   padding: 12px;
 }
 .r2-has-case .r2-case-pane { padding: 0 0 12px; }
+.r2-has-case.r2-layout-side .r2-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  transition: grid-template-columns 180ms ease, gap 180ms ease;
+}
+.r2-has-case.r2-layout-side .r2-case-col {
+  position: relative;
+  min-height: 0;
+  align-self: stretch;
+  overflow: hidden;
+  height: var(--r2-rubric-h, auto);
+}
 .r2-has-case.r2-layout-side .r2-case-pane {
+  position: relative;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  max-height: min(78vh, calc(100vh - 8rem));
+  box-sizing: border-box;
+}
+.r2-has-case.r2-layout-side .r2-rubric-pane {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  align-self: start;
+}
+.r2-has-case.r2-layout-stacked .r2-case-col {
+  position: static;
+  height: auto;
 }
 .r2-has-case.r2-layout-stacked .r2-case-pane {
-  overflow: visible;
+  position: static;
+  height: auto;
+  max-height: min(72vh, calc(100vh - 8rem));
+  overflow-y: auto;
   overflow-x: hidden;
-  max-height: none;
+  overscroll-behavior: contain;
 }
 .r2-has-case .r2-case-guide { padding: 0 16px; }
-.r2-has-case.r2-layout-side .r2-split {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: start;
-  transition: grid-template-columns 180ms ease, gap 180ms ease;
-}
 .r2-has-case.r2-layout-side.r2-case-minimized .r2-split {
   grid-template-columns: 52px minmax(0, 1fr);
   gap: 10px;
@@ -785,16 +816,16 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 @media (min-width: 700px) {
   .r2-has-case.r2-layout-stacked .r2-split { grid-template-columns: 1fr; }
   .r2-has-case.r2-layout-side .r2-case-pane {
-    /* Topbar is ~4.5rem; 7rem leaves a tight gap under the sticky bar. */
-    max-height: calc(100vh - 7rem);
+    max-height: none;
+    height: 100%;
   }
-  body.nav-collapsed .r2-has-case.r2-layout-side .r2-case-pane {
-    max-height: calc(100vh - 6.25rem);
+  .r2-has-case.r2-layout-stacked .r2-case-pane {
+    max-height: min(72vh, calc(100vh - 7rem));
+    overflow-y: auto;
   }
-  .r2-has-case.r2-layout-stacked .r2-case-pane,
   .r2-has-case.r2-layout-stacked .r2-rubric-pane {
     max-height: none;
-    overflow-y: visible;
+    overflow: visible;
   }
 }
 @media (max-width: 699px) {
@@ -803,11 +834,14 @@ table.grid tr.clickable:hover { background: var(--accent-soft); }
 }
 @container r2grade (max-width: 520px) {
   .r2-has-case.r2-layout-stacked .r2-split { grid-template-columns: 1fr; }
-  .r2-has-case .r2-case-pane,
   .r2-has-case .r2-rubric-pane {
     max-height: none;
   }
   .r2-has-case.r2-layout-side .r2-case-pane {
+    max-height: none;
+    height: 100%;
+  }
+  .r2-has-case.r2-layout-stacked .r2-case-pane {
     max-height: min(72vh, calc(100vh - 8rem));
   }
   .r2-rubric-pane .band-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
