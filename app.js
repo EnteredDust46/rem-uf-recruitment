@@ -3,7 +3,7 @@
 'use strict';
 
 const B = window.BOOTSTRAP;
-const BUILD_STAMP = 'rd2-flush-case-beh-20260915';
+const BUILD_STAMP = 'rd2-vibe-only-20260917';
 const ROUNDS = ['screen', 'round1', 'round2'];
 const ROUND_LABEL = { screen: 'Application Screen', round1: 'First Round', round2: 'Second Round' };
 const ROUND_SUB = { screen: 'Resume & written application', round1: 'Phone screen — behavioral', round2: 'Case + behavioral (final round)' };
@@ -1808,6 +1808,7 @@ function getGrade(round, applicantId) {
   if (!STATE.grades[round][applicantId]) STATE.grades[round][applicantId] = { scores: {}, notes: '' };
   const g = STATE.grades[round][applicantId];
   if (!g.scores || typeof g.scores !== 'object') g.scores = {};
+  if (round === 'round2') hydrateR2VibeFromFit(g);
   return g;
 }
 
@@ -1910,7 +1911,6 @@ const R2_CASE_DIM_SPEC = [
   { key: 'quant_reasoning', label: 'Math' },
   { key: 'brainstorming', label: 'Brainstorm' },
   { key: 'recommendation', label: 'Recommendation' },
-  { key: 'fit_communication', label: 'Fit and communication/vibe check' },
 ];
 const R2_GRADE_GUIDES = {
   introduction: 'Assess how effectively the candidate engages at the start: active listening, grasping the prompt, clarifying as needed, recapping in their own words, and setting up the case with confidence.',
@@ -1966,6 +1966,7 @@ const R2_CASE_DIM_FALLBACKS = {
   ],
 };
 const R2_VIBE_CHECK_KEY = 'vibe_check';
+const R2_FIT_KEY = 'fit_communication';
 const R2_SCORE_MIN = 1;
 const R2_SCORE_MAX = 4;
 
@@ -1992,7 +1993,7 @@ function r2CaseDims() {
 
 function r2WeightedDimKeys() {
   return r2CaseDims().map(function (d) { return d.key; }).filter(function (k) {
-    return k && k !== R2_VIBE_CHECK_KEY;
+    return k && k !== R2_VIBE_CHECK_KEY && k !== R2_FIT_KEY;
   });
 }
 
@@ -2002,6 +2003,32 @@ function r2VibeDim() {
     label: 'Vibe check',
     levels: R2_CASE_DIM_FALLBACKS.vibe_check,
   };
+}
+
+// Display-only copy: if vibe is empty, show the stored fit/communication score and
+// notes on the Vibe check card. Never deletes fit_communication keys.
+function hydrateR2VibeFromFit(g) {
+  if (!g || g.__vibeHydrated) return g;
+  g.__vibeHydrated = true;
+  if (!g.scores || typeof g.scores !== 'object') g.scores = {};
+  if (typeof g.scores[R2_VIBE_CHECK_KEY] !== 'number' && typeof g.scores[R2_FIT_KEY] === 'number') {
+    g.scores[R2_VIBE_CHECK_KEY] = g.scores[R2_FIT_KEY];
+  }
+  if (g.dimNotes && typeof g.dimNotes === 'object') {
+    if (!noteText(g.dimNotes[R2_VIBE_CHECK_KEY]).trim() && noteText(g.dimNotes[R2_FIT_KEY]).trim()) {
+      g.dimNotes[R2_VIBE_CHECK_KEY] = g.dimNotes[R2_FIT_KEY];
+    }
+  }
+  if (g.dimNotesBy && typeof g.dimNotesBy === 'object') {
+    Object.keys(g.dimNotesBy).forEach(function (gk) {
+      const bucket = g.dimNotesBy[gk];
+      if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) return;
+      if (!noteText(bucket[R2_VIBE_CHECK_KEY]).trim() && noteText(bucket[R2_FIT_KEY]).trim()) {
+        bucket[R2_VIBE_CHECK_KEY] = bucket[R2_FIT_KEY];
+      }
+    });
+  }
+  return g;
 }
 
 function r2FitDim() {
@@ -2024,7 +2051,7 @@ function isR2MathKey(key) {
 
 function isR2DimNoteKey(key) {
   if (!key) return false;
-  if (key === R2_VIBE_CHECK_KEY) return true;
+  if (key === R2_VIBE_CHECK_KEY || key === R2_FIT_KEY) return true;
   if (isR2MathKey(key) || key === r2FitDimKey()) return true;
   if (r2CaseDims().some(function (d) { return d && d.key === key; })) return true;
   const dims = (B.rubrics.round2 && B.rubrics.round2.dims) || [];
@@ -2038,6 +2065,11 @@ function r2DimScore(g, key) {
     if (typeof scores.math === 'number') return scores.math;
     return undefined;
   }
+  if (key === R2_VIBE_CHECK_KEY) {
+    if (typeof scores[R2_VIBE_CHECK_KEY] === 'number') return scores[R2_VIBE_CHECK_KEY];
+    if (typeof scores[R2_FIT_KEY] === 'number') return scores[R2_FIT_KEY];
+    return undefined;
+  }
   const v = scores[key];
   return typeof v === 'number' ? v : undefined;
 }
@@ -2047,9 +2079,13 @@ function r2DimNote(g, key) {
   if (g.dimNotes && noteText(g.dimNotes[key]).trim()) return g.dimNotes[key];
   if (isR2MathKey(key) && g.dimNotes && noteText(g.dimNotes.math).trim()) return g.dimNotes.math;
   if (isR2MathKey(key) && g.dimNotes && noteText(g.dimNotes.quant_reasoning).trim()) return g.dimNotes.quant_reasoning;
+  if (key === R2_VIBE_CHECK_KEY && g.dimNotes && noteText(g.dimNotes[R2_FIT_KEY]).trim()) return g.dimNotes[R2_FIT_KEY];
   if (g.qnotes && typeof g.qnotes[key] === 'string' && g.qnotes[key].trim()) return g.qnotes[key];
   if (isR2MathKey(key) && g.qnotes && typeof g.qnotes.math === 'string') return g.qnotes.math;
   if (isR2MathKey(key) && g.qnotes && typeof g.qnotes.quant_reasoning === 'string') return g.qnotes.quant_reasoning;
+  if (key === R2_VIBE_CHECK_KEY && g.qnotes && typeof g.qnotes[R2_FIT_KEY] === 'string' && g.qnotes[R2_FIT_KEY].trim()) {
+    return g.qnotes[R2_FIT_KEY];
+  }
   return '';
 }
 
@@ -2750,6 +2786,7 @@ function mergeGraderNotesBy(existing, patch) {
 
 function migrateR2GraderNotes(g, applicantId) {
   if (!g || !applicantId) return;
+  hydrateR2VibeFromFit(g);
   const primary = r2PrimaryGraderKey(applicantId);
   g.dimNotesBy = g.dimNotesBy || {};
   g.qnotesBy = g.qnotesBy || {};
@@ -2848,6 +2885,7 @@ function r2DimNoteForGrader(g, key, graderKey, applicantId) {
     if (noteText(by.math).trim()) return by.math;
     if (noteText(by.quant_reasoning).trim()) return by.quant_reasoning;
   }
+  if (key === R2_VIBE_CHECK_KEY && by && noteText(by[R2_FIT_KEY]).trim()) return by[R2_FIT_KEY];
   if (graderKey === r2PrimaryGraderKey(applicantId)) return r2DimNote(g, key);
   return '';
 }
@@ -4706,6 +4744,7 @@ function applyLiveR2GradeUpdate() {
   syncR2BehavioralRows(main, g, a);
   syncR2CaseRows(main, g, a, { keepCaseScroll: true });
   r2CaseDims().forEach(function (d) { updateR2ScoreUI(main, g, d.key); });
+  updateR2ScoreUI(main, g, R2_VIBE_CHECK_KEY);
   updateR2ScoreUI(main, g, 'caseScore');
   migrateR2GraderNotes(g, a.id);
   syncR2GraderTabLabels(a);
@@ -6573,7 +6612,7 @@ function renderRound2Grade(a, g) {
 
   main.innerHTML = `
     <div id="r2GradeRoot" class="r2-grade${caseExpanded ? ' r2-has-case' : ''} r2-layout-${esc(caseLayout)}${caseMin ? ' r2-case-minimized' : ''}">
-      <div class="weight-note r2-weight-note">Case score is the equal-weight average of scored categories among Intro, Framework, Math, Brainstorm, Recommendation, and Fit and communication/vibe check (/ 4). Behavioral avg is separate — typically 1–2 asked questions — and is not blended with the case score. The Vibe check at the bottom is reference only and does not count toward either average. Collapse or Clear on the case reference does not change scores.</div>
+      <div class="weight-note r2-weight-note">Case score is the equal-weight average of scored categories among Intro, Framework, Math, Brainstorm, and Recommendation (/ 4). Behavioral avg is separate — typically 1–2 asked questions — and is not blended with the case score. The Vibe check at the bottom is reference only and does not count toward either average. Collapse or Clear on the case reference does not change scores.</div>
       <div class="r2-split">
         <div class="r2-case-col">
           <div class="r2-case-pane" id="r2CasePane" data-r2-pane="case">

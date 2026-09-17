@@ -118,7 +118,7 @@ def round1_average(g):
 
 
 def round2_total(g):
-    dim_keys = ['framework', 'quant_reasoning', 'brainstorming', 'recommendation', 'fit_communication']
+    dim_keys = ['introduction', 'framework', 'quant_reasoning', 'brainstorming', 'recommendation']
     scores = (g or {}).get('scores') or {}
     vals = []
     for k in dim_keys:
